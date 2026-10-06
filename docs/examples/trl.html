@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trl pulse · 2026-10-06</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #e9e8e3; --slide: #fbfaf7; --surface: #f3f2ee; --card: #ffffff;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --band: rgba(42,120,214,0.07);
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b; --good-text: #006300; --crit-text: #b22a2a;
+  --accent: #2a78d6; --scale: 1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #050505; --slide: #161615; --surface: #1d1d1c; --card: #1f1f1e;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --band: rgba(57,135,229,0.12);
+    --good-text: #0ca30c; --crit-text: #e66767; --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #050505; --slide: #161615; --surface: #1d1d1c; --card: #1f1f1e;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --band: rgba(57,135,229,0.12);
+  --good-text: #0ca30c; --crit-text: #e66767; --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--page); color: var(--ink); }
+body { font: 15px/1.42 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+
+/* ---------- stage: fixed 1280x720 canvas scaled to the viewport, one slide visible */
+#deck { position: fixed; inset: 0; }
+.slide { position: absolute; left: 50%; top: 50%; width: 1280px; height: 720px; margin: -360px 0 0 -640px;
+  transform: scale(var(--scale)); transform-origin: center; background: var(--slide);
+  box-shadow: 0 10px 40px rgba(0,0,0,.18); border-radius: 6px; overflow: hidden;
+  display: flex; flex-direction: column; padding: 0 56px; opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s; }
+.slide.active { opacity: 1; visibility: visible; }
+.slide-head { padding-top: 14px; display: flex; flex-direction: column; gap: 2px; }
+.slide:not(:has(.metro)) .slide-head { padding-top: 40px; }
+.slide-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px 0 6px; }
+.slide-foot { height: 34px; flex: none; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--muted);
+  border-top: 1px solid var(--grid); letter-spacing: .02em; }
+.kicker { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { margin: 0; }
+h2 { font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; }
+h3 { font-size: 13px; color: var(--ink-2); font-weight: 650; margin-bottom: 6px; }
+.sowhat { color: var(--ink-2); margin: 4px 0 0; font-size: 15px; max-width: 1080px; }
+.cite { font-size: 10px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 2px; }
+
+/* ---------- layout primitives */
+.grow { flex: 1; min-height: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; }
+.cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.span2 { grid-column: span 2; }
+.card { background: var(--card); border: 1px solid var(--ring); border-radius: 10px; padding: 12px 14px; min-width: 0; min-height: 0; overflow: hidden; }
+.tile { padding: 10px 14px; }
+.tile .lbl { color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .val { font-size: 28px; font-weight: 680; letter-spacing: -0.01em; margin: 2px 0; line-height: 1.1; }
+.tile .sub { font-size: 11px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.info { color: var(--muted); font-size: 11px; }
+.delta { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.delta.good { color: var(--good-text); } .delta.bad { color: var(--crit-text); } .delta.flat { color: var(--ink-2); }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; padding: 0 7px 0 5px; border-radius: 99px;
+  border: 1px solid var(--ring); color: var(--ink-2); white-space: nowrap; line-height: 18px; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.chip.green i { background: var(--good); } .chip.amber i { background: var(--warn); } .chip.red i { background: var(--crit); }
+.finding { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--grid); font-size: 15.5px; line-height: 1.45; }
+.grow > .card { display: flex; flex-direction: column; } .grow > .card > svg.chart { margin-top: auto; margin-bottom: auto; }
+.finding:first-of-type { border-top: 0; }
+.sev { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--ring); white-space: nowrap; }
+.sev.high { color: var(--crit-text); } .sev.medium { color: var(--ink-2); } .sev.low { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 11px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.compact td, table.compact th { padding: 4px 6px; }
+table.kpis td, table.kpis th { padding: 4px 6px; }
+.clamp { max-width: 0; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clamp3 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--ink-2); margin-bottom: 4px; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; } svg .baseline { stroke: var(--axis); stroke-width: 1; }
+svg text { fill: var(--muted); font-size: 11px; font-family: inherit; } svg text.lab { fill: var(--ink-2); } svg text.val { fill: var(--ink); font-weight: 600; }
+svg .band { fill: var(--band); } svg .hit { fill: transparent; } svg .mark:hover { filter: brightness(1.12); }
+.muted { color: var(--muted); } .small { font-size: 12px; } p { margin: 0 0 6px; }
+.pill { font-size: 11px; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--ring); color: var(--ink-2); white-space: nowrap; }
+.empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 15px; min-height: 120px;
+  border: 1px dashed var(--grid); border-radius: 8px; margin-top: 6px; }
+.warnbox { border-left: 3px solid var(--warn); padding: 6px 12px; background: var(--card); border-radius: 6px; font-size: 12.5px; color: var(--ink-2); }
+a { color: var(--accent); }
+code { font-size: 12px; }
+
+/* ---------- title slide */
+.title-slide { background: radial-gradient(1200px 600px at 85% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%), var(--slide); }
+.title-slide .slide-body { justify-content: center; padding: 0; }
+.title-wrap { display: flex; flex-direction: column; gap: 22px; }
+.hero { font-size: 56px; line-height: 1.04; letter-spacing: -0.02em; max-width: 1080px; }
+.title-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); }
+.title-strip > div { padding: 12px 14px 0 0; display: flex; flex-direction: column; gap: 2px; }
+.title-strip b { font-size: 30px; letter-spacing: -0.01em; } .title-strip span { font-size: 12px; color: var(--ink-2); }
+.title-meta { font-size: 13px; color: var(--ink-2); max-width: 900px; margin: 0; }
+
+/* ---------- scorecard */
+.nutshell { border-left: 4px solid var(--accent); }
+.nut { font-size: 20px; line-height: 1.35; margin: 2px 0 4px; max-width: 1080px; }
+[id^="s-scorecard"] table.kpis { font-size: 14px; } [id^="s-scorecard"] table.kpis td { padding: 4px 6px; }
+.counters { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 6px; font-size: 12.5px; }
+
+/* ---------- plan */
+.prio { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 21px; padding: 0 6px; border-radius: 6px;
+  background: var(--ink); color: var(--slide); font-size: 11.5px; font-weight: 700; flex: none; }
+.prio.big { min-width: 58px; height: 42px; font-size: 21px; border-radius: 10px; }
+.roadmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 18px; }
+.lane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lane-item { display: flex; gap: 8px; align-items: center; color: var(--ink); background: none; border: 0; padding: 0; font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+.lane-item:hover { text-decoration: underline; }
+.plan-table td { font-size: 13px; padding: 7px 6px; } .plan-table td:nth-child(2) { width: 24%; } .plan-table td:nth-child(3), .plan-table td:nth-child(4) { width: 29%; }
+.plan-slide { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+.plan-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.plan-meta { display: flex; gap: 10px; align-items: center; }
+.io { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.io > div { padding: 12px 16px; border-radius: 10px; background: var(--card); border: 1px solid var(--ring); font-size: 18px; line-height: 1.5; min-width: 0; }
+.io p { margin: 4px 0 0; }
+.io .issue { border-left: 4px solid var(--crit); } .io .outcome { border-left: 4px solid var(--good); }
+.actions { margin: 6px 0 0; padding-left: 24px; font-size: 17px; } .actions li { margin: 7px 0; }
+.plan-measure { display: flex; flex-direction: column; gap: 4px; }
+.measure { display: flex; flex-direction: column; margin-bottom: 12px; } .measure b { font-size: 30px; line-height: 1.15; }
+.target { font-size: 17px; font-weight: 650; }
+
+/* ---------- metro band (inside each slide) */
+.metro { display: flex; gap: 20px; align-items: flex-end; padding: 12px 0 8px; border-bottom: 1px solid var(--grid); flex: none; }
+.metro-line { flex: var(--n, 1) 1 0; min-width: 0; }
+.metro-name { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metro-line.active .metro-name { color: var(--ink); font-weight: 700; }
+.metro-stops { display: flex; position: relative; }
+.metro-stops::before { content: ""; position: absolute; left: 6px; right: 6px; top: 6px; height: 3px; border-radius: 2px; background: var(--c); opacity: .3; }
+.metro-line.active .metro-stops::before { opacity: 1; }
+.stop { flex: 1 1 0; min-width: 0; background: none; border: 0; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--muted); font: inherit; }
+.stop:first-child { align-items: flex-start; } .stop:last-child { align-items: flex-end; } .stop:only-child { align-items: center; }
+.stop i { width: 13px; height: 13px; border-radius: 50%; background: var(--slide); border: 3px solid var(--c); position: relative; z-index: 1; }
+.stop.past i { background: var(--c); }
+.stop.here i { width: 17px; height: 17px; margin-top: -2px; background: var(--c); box-shadow: 0 0 0 2px var(--slide), 0 0 0 4px var(--c); }
+.stop span { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.stop.here span { color: var(--ink); font-weight: 700; } .stop:hover span { color: var(--ink); }
+
+/* ---------- chrome */
+#tip { position: fixed; pointer-events: none; background: var(--card); color: var(--ink); border: 1px solid var(--ring); border-radius: 8px; padding: 6px 9px;
+  font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.15); opacity: 0; transition: opacity .08s; z-index: 20; max-width: 280px; }
+#nav { position: fixed; right: 12px; bottom: 10px; display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); z-index: 10; opacity: .4; transition: opacity .2s; }
+#nav:hover, #nav:focus-within { opacity: 1; }
+#nav button { font: inherit; background: var(--card); color: var(--ink-2); border: 1px solid var(--ring); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+
+/* ---------- overview grid (press O) */
+body.overview { overflow: auto; }
+body.overview #deck { position: static; display: grid; grid-template-columns: repeat(auto-fill, 320px); grid-auto-rows: 180px; gap: 18px; padding: 24px; justify-content: center; }
+body.overview .slide { position: relative; left: auto; top: auto; margin: 0; opacity: 1; visibility: visible; transform: scale(0.25); transform-origin: top left; cursor: pointer; transition: none; }
+body.overview .slide.active { outline: 10px solid var(--accent); }
+body.overview .slide * { pointer-events: none; }
+
+/* ---------- narrow screens: natural scrolling layout */
+@media (max-width: 760px) {
+  #deck { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .slide { position: relative; left: auto; top: auto; margin: 0; width: auto; height: auto; transform: none; opacity: 1; visibility: visible;
+    border-radius: 0; box-shadow: none; padding: 0 16px; border-bottom: 8px solid var(--page); overflow: visible; }
+  .slide-head { padding-top: 16px !important; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cols2, .cols3, .io, .plan-slide { grid-template-columns: minmax(0, 1fr); } .span2 { grid-column: auto; }
+  .hero { font-size: 32px; } .title-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .title-slide .slide-body { padding: 32px 0; }
+  .metro { gap: 8px; } .stop span, .metro-name { display: none; } .metro-line.active .metro-name { display: block; } .stop.here span { display: block; overflow: visible; max-width: none; position: relative; }
+  .card { overflow-x: auto; } .clamp { max-width: none; white-space: normal; }
+  h2 { font-size: 22px; } .nut { font-size: 17px; }
+}
+
+/* ---------- print: one slide per page */
+@page { size: 1280px 720px; margin: 0; }
+@media print {
+  html, body { height: auto; overflow: visible; background: none; }
+  #deck { position: static; }
+  .slide { position: relative; left: auto; top: auto; margin: 0; transform: none; opacity: 1; visibility: visible; box-shadow: none; border-radius: 0;
+    page-break-after: always; break-after: page; }
+  #nav, #tip { display: none; }
+}
+</style>
+</head>
+<body>
+<main id="deck" aria-roledescription="carousel"></main>
+<div id="tip" role="tooltip"></div>
+<nav id="nav" aria-label="Deck controls"><button id="themeBtn" aria-label="Toggle light/dark theme">◐</button><button id="ovBtn" aria-label="Overview of all slides (O)">▦</button><button id="prev" aria-label="Previous slide">←</button><span id="pos"></span><button id="next" aria-label="Next slide">→</button></nav>
+<script id="data" type="application/json">{"metrics":{"repo":"huggingface/trl","title":"trl","as_of":"2026-10-06","window_days":90,"windows":{"cur":["2026-07-09","2026-10-06"],"prior":["2026-04-10","2026-07-09"]},"kpis":{"issues_opened":{"key":"issues_opened","label":"Issues opened","value":208,"prior":86,"delta":122,"unit":"","status":"na","lower_is_better":false,"note":"","source":"GitHub issues","family":"flow","direction":"neutral"},"issues_closed":{"key":"issues_closed","label":"Issues closed","value":318,"prior":413,"delta":-95,"unit":"","status":"na","lower_is_better":false,"note":"","source":"GitHub issues","family":"flow","direction":"up"},"issue_backlog_net":{"key":"issue_backlog_net","label":"Net issue backlog change","value":-110,"prior":-327,"delta":217,"unit":"","status":"na","lower_is_better":true,"note":"opened − closed in window","source":"","family":"flow","direction":"down"},"open_issues":{"key":"open_issues","label":"Open issues (now)","value":108,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"open_issues_over_90d":{"key":"open_issues_over_90d","label":"Open issues older than 90 days","value":25,"prior":null,"delta":null,"unit":"","status":"amber","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"unanswered_open_issues":{"key":"unanswered_open_issues","label":"Open issues with no maintainer reply","value":40,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"median_first_response_days":{"key":"median_first_response_days","label":"Median maintainer first response (issues)","value":2.4,"prior":2.78,"delta":-0.38,"unit":"days","status":"amber","lower_is_better":true,"note":"non-maintainer issues; responded ones only","source":"","family":"flow","direction":"down"},"p90_first_response_days":{"key":"p90_first_response_days","label":"p90 maintainer first response (issues)","value":43.12,"prior":80.87,"delta":-37.75,"unit":"days","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"response_within_7d":{"key":"response_within_7d","label":"Issues answered by a maintainer within 7 days","value":0.309,"prior":0.396,"delta":-0.087,"unit":"ratio","status":"na","lower_is_better":false,"note":"n=97 issues ≥7 days old","source":"","family":"flow","direction":"up"},"median_pr_first_response_days":{"key":"median_pr_first_response_days","label":"Median maintainer first response (external PRs)","value":3.02,"prior":0.72,"delta":2.3,"unit":"days","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"prs_opened":{"key":"prs_opened","label":"PRs opened (humans)","value":941,"prior":730,"delta":211,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"neutral"},"prs_merged":{"key":"prs_merged","label":"PRs merged","value":601,"prior":483,"delta":118,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"pr_merge_rate":{"key":"pr_merge_rate","label":"PR merge rate (of closed)","value":0.619,"prior":0.709,"delta":-0.09,"unit":"ratio","status":"green","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"external_pr_merge_rate":{"key":"external_pr_merge_rate","label":"External PR merge rate (of closed)","value":0.184,"prior":0.385,"delta":-0.201,"unit":"ratio","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"median_time_to_merge_days":{"key":"median_time_to_merge_days","label":"Median time to merge","value":1.25,"prior":0.88,"delta":0.37,"unit":"days","status":"green","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"median_time_to_merge_external_days":{"key":"median_time_to_merge_external_days","label":"Median time to merge (external PRs)","value":3.83,"prior":1.01,"delta":2.82,"unit":"days","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"stale_open_prs":{"key":"stale_open_prs","label":"Open PRs idle > 30 days","value":33,"prior":null,"delta":null,"unit":"","status":"red","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"external_pr_share":{"key":"external_pr_share","label":"Share of PRs from outside maintainers","value":0.341,"prior":0.399,"delta":-0.058,"unit":"ratio","status":"amber","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"external_merged_share":{"key":"external_merged_share","label":"Share of merged PRs from outside maintainers","value":0.105,"prior":0.215,"delta":-0.11,"unit":"ratio","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"pr_contributors":{"key":"pr_contributors","label":"PR authors","value":143,"prior":119,"delta":24,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"new_contributors":{"key":"new_contributors","label":"First-time PR authors","value":116,"prior":83,"delta":33,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"issue_reporters":{"key":"issue_reporters","label":"Distinct issue reporters","value":67,"prior":47,"delta":20,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"top_merger_share":{"key":"top_merger_share","label":"Share of merges by top merger (maintainer A)","value":0.493,"prior":0.478,"delta":0.015,"unit":"ratio","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"top_author_pr_share":{"key":"top_author_pr_share","label":"Share of PRs by top author (maintainer A)","value":0.309,"prior":0.264,"delta":0.045,"unit":"ratio","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"stars_total":{"key":"stars_total","label":"GitHub stars (total)","value":19459,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"","source":"GitHub API","family":"adoption","direction":"neutral"},"stars_new":{"key":"stars_new","label":"New stars in window","value":null,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"no star history available","source":"","family":"adoption","direction":"up"},"stars_growth_rate":{"key":"stars_growth_rate","label":"Star growth vs window start","value":null,"prior":null,"delta":null,"unit":"ratio","status":"na","lower_is_better":false,"note":"no star history available","source":"","family":"adoption","direction":"up"},"forks_total":{"key":"forks_total","label":"Forks (total)","value":3046,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"adoption","direction":"neutral"},"forks_new":{"key":"forks_new","label":"New forks","value":254,"prior":225,"delta":29,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"adoption","direction":"up"},"forks_active":{"key":"forks_active","label":"Forks with own pushes in window","value":179,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"pushedAt after creation (>1h)","source":"","family":"adoption","direction":"up"},"pypi_downloads":{"key":"pypi_downloads","label":"PyPI downloads (no mirrors)","value":9687378,"prior":11313855,"delta":-1626477,"unit":"","status":"na","lower_is_better":false,"note":"","source":"pypistats.org","family":"adoption","direction":"up"},"releases":{"key":"releases","label":"Releases (GitHub or PyPI)","value":22,"prior":18,"delta":4,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"adoption","direction":"up"},"days_since_release":{"key":"days_since_release","label":"Days since last release","value":0,"prior":null,"delta":null,"unit":"","status":"green","lower_is_better":true,"note":"","source":"","family":"adoption","direction":"down"},"dependents":{"key":"dependents","label":"GitHub dependents (Used by)","value":null,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"best-effort scrape","source":"","family":"adoption","direction":"up"},"commits":{"key":"commits","label":"Commits (non-merge, humans)","value":592,"prior":479,"delta":113,"unit":"","status":"na","lower_is_better":false,"note":"","source":"local git","family":"code","direction":"neutral"},"commit_authors":{"key":"commit_authors","label":"Commit authors","value":48,"prior":59,"delta":-11,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"code","direction":"up"},"bus_factor":{"key":"bus_factor","label":"Bus factor (authors covering 50% of commits)","value":2,"prior":2,"delta":0,"unit":"","status":"amber","lower_is_better":false,"note":"","source":"","family":"code","direction":"up"},"top_committer_share":{"key":"top_committer_share","label":"Top committer share of commits","value":0.465,"prior":0.378,"delta":0.087,"unit":"ratio","status":"na","lower_is_better":true,"note":"","source":"","family":"code","direction":"down"},"modules_single_owner":{"key":"modules_single_owner","label":"Modules where one author made >80% of commits","value":2,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"modules with ≥3 commits in window","source":"","family":"code","direction":"down"},"ci_pass_rate_main":{"key":"ci_pass_rate_main","label":"CI pass rate on main","value":1.0,"prior":0.977,"delta":0.023,"unit":"ratio","status":"green","lower_is_better":false,"note":"n=375 runs","source":"GitHub Actions","family":"code","direction":"up"},"ci_pass_rate_pr":{"key":"ci_pass_rate_pr","label":"CI pass rate on PRs","value":null,"prior":null,"delta":null,"unit":"ratio","status":"na","lower_is_better":false,"note":"n=0 runs","source":"","family":"code","direction":"up"},"ci_median_minutes":{"key":"ci_median_minutes","label":"Median CI duration (main)","value":1.28,"prior":2.2,"delta":-0.92,"unit":"min","status":"na","lower_is_better":true,"note":"","source":"","family":"code","direction":"down"},"test_loc_ratio":{"key":"test_loc_ratio","label":"Test LOC / source LOC","value":0.69,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"code","direction":"up"},"critical_deps_behind":{"key":"critical_deps_behind","label":"Exact-pinned critical deps behind latest PyPI","value":0,"prior":null,"delta":null,"unit":"of 0 pinned","status":"na","lower_is_better":true,"note":"","source":"pyproject.toml vs PyPI","family":"code","direction":"down"},"critical_deps_unbounded":{"key":"critical_deps_unbounded","label":"Critical deps with no upper bound on some platform","value":5,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"exposed to breaking upstream releases","source":"","family":"code","direction":"down"},"bug_share":{"key":"bug_share","label":"Share of new issues that are bugs","value":0.75,"prior":0.64,"delta":0.11,"unit":"ratio","status":"na","lower_is_better":true,"note":"labels — gold-prelabel: 206, model:ModernBERT-base_issue-type: 2","source":"","family":"themes","direction":"down"},"classifier_coverage":{"key":"classifier_coverage","label":"New issues with a confident theme label","value":0.99,"prior":null,"delta":null,"unit":"ratio","status":"na","lower_is_better":false,"note":"labels — gold-prelabel: 206, model:ModernBERT-base_issue-type: 2","source":"","family":"themes","direction":"up"},"top_theme_share":{"key":"top_theme_share","label":"Top issue theme share (ci_tests)","value":0.214,"prior":null,"delta":null,"unit":"ratio","status":"na","lower_is_better":false,"note":"","source":"","family":"themes","direction":"neutral"}},"context":{"flow":{"maintainers":["maintainer D","maintainer G","maintainer H","maintainer A","maintainer F","maintainer I","maintainer J","maintainer C","maintainer K","maintainer L","maintainer M","maintainer B","maintainer N","maintainer E"],"flow":{"cur":{"opened":208,"closed":318,"net":-110,"closed_completed":205,"resp_med":2.4,"resp_p90":43.12,"sla":0.309,"sla_n":97,"pr_opened":941,"pr_ext_opened":321,"pr_resp_med":3.02,"merged":601,"closed_unmerged":370,"merge_rate":0.619,"ext_merge_rate":0.184,"ttm_med":1.25,"ttm_p90":9.71,"ttm_ext_med":3.83,"ext_share":0.341,"ext_merged_share":0.105,"contributors":143,"new_contributors":116,"issue_reporters":67,"top_author_share":0.309,"top_author":"maintainer A","top_merger_share":0.493,"top_merger":"maintainer A"},"prior":{"opened":86,"closed":413,"net":-327,"closed_completed":273,"resp_med":2.78,"resp_p90":80.87,"sla":0.396,"sla_n":53,"pr_opened":730,"pr_ext_opened":291,"pr_resp_med":0.72,"merged":483,"closed_unmerged":198,"merge_rate":0.709,"ext_merge_rate":0.385,"ttm_med":0.88,"ttm_p90":10.06,"ttm_ext_med":1.01,"ext_share":0.399,"ext_merged_share":0.215,"contributors":119,"new_contributors":83,"issue_reporters":47,"top_author_share":0.264,"top_author":"maintainer A","top_merger_share":0.478,"top_merger":"maintainer B"}},"open_issues":108,"unanswered_open_issues":[[7548,"OnlineDPOTrainer ignores additional eos ids declared in model.generation_config"],[7544,"IWOPDTrainer can skip the mandatory vLLM weight sync when resuming from a checkpoint"],[7543,"BEMACallback crashes at on_train_begin with a PEFT (LoRA) model"],[7520,"Add score centering to GRPO for vLLM training-inference mismatch"],[7513,"OnlineDPOTrainer documents processing_class as optional but rejects omission"],[7512,"Clarify raw held-out dataset evaluation for CPO and ORPO"],[7511,"BEMACallback fails at train start with ordinary PEFT LoRA"],[7430,"cast_lm_head_to_fp32 is ignored during GRPO generations (both BF16 autocast and vLLM)"],[7428,"Perf Issue: Colocated vLLM sleeps and reloads weights between the tool turns of one rollout"],[7423,"Merged-LoRA export changes frozen base weights"]],"stale_prs":[[4891,"[GRPO] feat: Geometric Sequence Masking","maintainer G"],[5398,"Add per-sample tool filtering to GRPOTrainer via `tools` column","contributor 7"],[5413,"Skip redundant forward pass for on-policy vLLM importance sampling","contributor 8"],[5434,"FIPO loss","contributor 9"],[5602,"support prefetch/prefetch_depth for async GRPO for ~5% speedups","contributor 10"],[5725,"[gold] Implement seq_kd in GOLDTrainer","contributor 11"],[5747,"Add end-to-end GRPO + OpenReward notebook (Local ORS / Toolathlon Gym / Qwen3.5-4B)","contributor 12"],[5748,"[AsyncGRPO] Fix missing tool gates in worker init (fixes #5742)","contributor 13"],[5782,"[GKD] Use vLLM for student generation","contributor 11"],[5829,"feat(sft): configurable chunked-NLL chunk size","contributor 14"]]},"adoption":{"releases":[["v1.14.2","2026-10-06"],["PyPI 1.14.2","2026-10-06"],["v1.14.1","2026-09-29"],["PyPI 1.14.1","2026-09-29"],["v1.14.0","2026-09-25"],["PyPI 1.14.0","2026-09-25"],["v1.13.0","2026-09-10"],["PyPI 1.13.0","2026-09-10"],["v1.12.0","2026-08-26"],["v1.11.0","2026-08-26"],["PyPI 1.12.0","2026-08-26"],["PyPI 1.11.0","2026-08-26"],["v1.10.0","2026-08-13"],["PyPI 1.10.0","2026-08-13"],["v1.9.2","2026-07-28"],["PyPI 1.9.2","2026-07-28"],["v1.9.1","2026-07-26"],["PyPI 1.9.1","2026-07-26"],["v1.9.0","2026-07-21"],["PyPI 1.9.0","2026-07-21"],["v1.8.0","2026-07-09"],["PyPI 1.8.0","2026-07-09"],["v1.7.1","2026-07-04"],["PyPI 1.7.1","2026-07-04"],["v1.7.0","2026-06-25"],["PyPI 1.7.0","2026-06-25"],["v1.6.0","2026-06-11"],["PyPI 1.6.0","2026-06-11"],["v1.5.1","2026-05-27"],["PyPI 1.5.1","2026-05-27"],["v1.5.0","2026-05-25"],["PyPI 1.5.0","2026-05-25"],["v1.4.0","2026-05-09"],["PyPI 1.4.0","2026-05-08"],["v1.3.0","2026-04-26"],["PyPI 1.3.0","2026-04-26"],["v1.2.0","2026-04-17"],["PyPI 1.2.0","2026-04-17"],["v1.1.0","2026-04-12"],["PyPI 1.1.0","2026-04-12"],["v1.0.0","2026-03-31"],["PyPI 1.0.0","2026-03-30"],["v0.29.1","2026-03-20"],["PyPI 0.29.1","2026-03-20"],["v0.29.0","2026-02-25"],["PyPI 0.29.0","2026-02-25"],["v0.28.0","2026-02-10"],["PyPI 0.28.0","2026-02-10"],["v0.27.2","2026-02-03"],["PyPI 0.27.2","2026-02-03"],["v0.27.1","2026-01-24"],["PyPI 0.27.1","2026-01-24"],["v0.27.0","2026-01-16"],["PyPI 0.27.0","2026-01-16"],["v0.26.2","2025-12-18"],["PyPI 0.26.2","2025-12-18"],["v0.26.1","2025-12-12"],["PyPI 0.26.1","2025-12-12"],["v0.26.0","2025-12-09"],["PyPI 0.26.0","2025-12-09"],["v0.25.1","2025-11-12"],["PyPI 0.25.1","2025-11-12"],["v0.25.0","2025-11-06"],["PyPI 0.25.0","2025-11-05"],["v0.24.0","2025-10-16"],["PyPI 0.24.0","2025-10-16"],["v0.23.1","2025-10-02"],["PyPI 0.23.1","2025-10-02"],["v0.23.0","2025-09-10"],["PyPI 0.23.0","2025-09-10"],["v0.22.2","2025-09-03"],["PyPI 0.22.2","2025-09-03"],["v0.22.1","2025-08-29"],["v0.22.0","2025-08-29"],["PyPI 0.22.1","2025-08-29"],["PyPI 0.22.0","2025-08-29"],["v0.21.0","2025-08-05"],["PyPI 0.21.0","2025-08-05"],["v0.20.0","2025-07-29"],["PyPI 0.20.0","2025-07-29"],["v0.19.1","2025-07-08"],["PyPI 0.19.1","2025-07-08"],["v0.19.0","2025-06-21"],["PyPI 0.19.0","2025-06-20"],["v0.18.2","2025-06-15"],["PyPI 0.18.2","2025-06-15"],["v0.18.1","2025-06-03"],["PyPI 0.18.1","2025-05-29"],["v0.18.0","2025-05-28"],["PyPI 0.18.0","2025-05-28"],["v0.17.0","2025-04-25"],["PyPI 0.17.0","2025-04-24"],["v0.16.1","2025-04-04"],["PyPI 0.16.1","2025-04-04"],["v0.16.0","2025-03-22"],["PyPI 0.16.0","2025-03-22"],["v0.15.2","2025-02-25"],["PyPI 0.15.2","2025-02-25"],["PyPI 0.15.1","2025-02-18"],["PyPI 0.15.0","2025-02-13"],["PyPI 0.14.0","2025-01-29"],["PyPI 0.13.0","2024-12-16"],["PyPI 0.12.2","2024-12-06"],["PyPI 0.12.1","2024-11-14"],["PyPI 0.12.0","2024-11-01"],["PyPI 0.11.4","2024-10-15"],["PyPI 0.11.3","2024-10-10"],["PyPI 0.11.2","2024-10-07"],["PyPI 0.11.1","2024-09-24"],["PyPI 0.11.0","2024-09-19"],["PyPI 0.10.1","2024-08-29"],["PyPI 0.9.6","2024-07-08"],["PyPI 0.9.4","2024-06-06"],["PyPI 0.9.3","2024-06-05"],["PyPI 0.9.2","2024-06-05"],["PyPI 0.8.6","2024-04-22"],["PyPI 0.8.5","2024-04-18"],["PyPI 0.8.4","2024-04-17"],["PyPI 0.8.3","2024-04-12"],["PyPI 0.8.2","2024-04-11"],["PyPI 0.8.1","2024-03-20"],["PyPI 0.8.0","2024-03-19"],["PyPI 0.7.11","2024-02-16"],["PyPI 0.7.10","2024-01-19"],["PyPI 0.7.9","2024-01-09"],["PyPI 0.7.8","2024-01-09"],["PyPI 0.7.7","2023-12-26"],["PyPI 0.7.6","2023-12-22"],["PyPI 0.7.5","2023-12-22"],["PyPI 0.7.4","2023-11-08"],["PyPI 0.7.3","2023-11-08"],["PyPI 0.7.2","2023-10-12"],["PyPI 0.7.1","2023-08-30"],["PyPI 0.7.0","2023-08-30"],["PyPI 0.6.0","2023-08-24"],["PyPI 0.5.0","2023-08-02"],["PyPI 0.4.7","2023-07-13"],["PyPI 0.4.6","2023-06-23"],["PyPI 0.4.5","2023-06-23"],["PyPI 0.4.4","2023-06-08"],["PyPI 0.4.3","2023-06-08"],["PyPI 0.4.2","2023-06-07"],["PyPI 0.4.1","2023-03-17"],["PyPI 0.4.0","2023-03-09"],["PyPI 0.3.1","2023-03-02"],["PyPI 0.3.0","2023-03-01"],["PyPI 0.2.1","2023-01-25"],["PyPI 0.2.0","2023-01-25"],["PyPI 0.1.0","2022-05-15"],["PyPI 0.0.3","2021-02-28"],["PyPI 0.0.2","2020-07-17"],["PyPI 0.0.1","2020-03-30"]],"snapshots":[{"date":"2026-10-06","stars":19459,"forks":3046,"watchers":108,"open_issues":108,"open_prs":144}]},"code":{"module_bus_factor":{"tests":2,"generation":2,"trainer":2,"trl":1,"experimental":1,"examples":2,"docs":1,"ci":1,"chat_templates":1,"scripts":1,"packaging":1,"other":1,"models":2,"kernels":1,"cli":1},"module_top_author_share":{"tests":0.398,"generation":0.444,"trainer":0.474,"trl":0.583,"experimental":0.538,"examples":0.4,"docs":0.504,"ci":0.763,"chat_templates":0.5,"scripts":0.85,"packaging":0.524,"other":0.533,"models":0.333,"kernels":1.0,"cli":1.0},"ci_workflow":"Build documentation","module_tested":{"cli":true,"experimental":false,"generation":false,"kernels":true,"models":false,"rewards":true,"trainer":true,"trl":false},"backends":{},"dependencies":[{"dep":"accelerate","spec":"accelerate>=1.4.0","pinned":null,"latest":"1.15.0","behind":false,"pinned_somewhere":false,"unbounded":true},{"dep":"datasets","spec":"datasets>=4.7.0","pinned":null,"latest":"5.1.0","behind":false,"pinned_somewhere":false,"unbounded":true},{"dep":"transformers","spec":"transformers>=4.56.2","pinned":null,"latest":"5.19.0","behind":false,"pinned_somewhere":false,"unbounded":true},{"dep":"jinja2","spec":"jinja2","pinned":null,"latest":"3.1.6","behind":false,"pinned_somewhere":false,"unbounded":true},{"dep":"packaging","spec":"packaging>20.0","pinned":null,"latest":"26.3","behind":false,"pinned_somewhere":false,"unbounded":true}],"known_incidents":[],"head":"adff493"},"themes":{"gate":{"gold_reviewed":false,"rule":"among candidates within 3% macro-F1 of the best with calibrated ECE ≤ 0.1: lowest API cost, then highest coverage at 85% precision, then fastest","types":{"model":"ModernBERT-base_issue-type","passed":true,"reason":"meets gate","macro_f1":0.898,"ece":0.0282,"accuracy":0.9444,"temperature":0.822,"threshold":0.4429,"coverage":1.0,"selective_precision":0.944,"confusion":{"bug":{"bug":95,"enhancement":3,"question":1},"enhancement":{"bug":1,"enhancement":33,"question":1},"question":{"bug":2,"enhancement":0,"question":8}},"eligible":["ModernBERT-base_issue-type"],"best_f1":0.898},"themes":{"model":"bge-base-en-v1.5+LR","passed":false,"reason":"macro-F1 0.62 < 0.7","macro_f1":0.6232,"ece":0.0927,"accuracy":0.7083,"temperature":0.314,"threshold":0.5627,"coverage":0.688,"selective_precision":0.818,"confusion":{"online_rl":{"online_rl":17,"preference":0,"sft":1,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":1,"metrics_logging":0,"new_methods":2,"install_cli":0,"ci_tests":0,"docs_examples":1,"other":1},"preference":{"online_rl":2,"preference":6,"sft":0,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":1,"ci_tests":1,"docs_examples":1,"other":0},"sft":{"online_rl":1,"preference":2,"sft":11,"vllm_async":0,"multimodal":1,"tools_agents":1,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":0,"ci_tests":1,"docs_examples":1,"other":0},"vllm_async":{"online_rl":0,"preference":1,"sft":0,"vllm_async":12,"multimodal":0,"tools_agents":2,"distributed_perf":0,"metrics_logging":0,"new_methods":1,"install_cli":0,"ci_tests":0,"docs_examples":0,"other":0},"multimodal":{"online_rl":0,"preference":0,"sft":0,"vllm_async":0,"multimodal":11,"tools_agents":0,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":0,"ci_tests":0,"docs_examples":0,"other":0},"tools_agents":{"online_rl":0,"preference":0,"sft":0,"vllm_async":0,"multimodal":0,"tools_agents":4,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":0,"ci_tests":0,"docs_examples":0,"other":0},"distributed_perf":{"online_rl":1,"preference":2,"sft":1,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":7,"metrics_logging":0,"new_methods":0,"install_cli":1,"ci_tests":0,"docs_examples":0,"other":0},"metrics_logging":{"online_rl":2,"preference":1,"sft":1,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":1,"metrics_logging":3,"new_methods":0,"install_cli":0,"ci_tests":0,"docs_examples":0,"other":0},"new_methods":{"online_rl":3,"preference":0,"sft":0,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":0,"metrics_logging":1,"new_methods":3,"install_cli":0,"ci_tests":0,"docs_examples":0,"other":0},"install_cli":{"online_rl":0,"preference":1,"sft":0,"vllm_async":0,"multimodal":0,"tools_agents":1,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":5,"ci_tests":0,"docs_examples":0,"other":1},"ci_tests":{"online_rl":0,"preference":0,"sft":0,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":3,"ci_tests":20,"docs_examples":0,"other":0},"docs_examples":{"online_rl":0,"preference":0,"sft":0,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":0,"ci_tests":0,"docs_examples":3,"other":0},"other":{"online_rl":0,"preference":0,"sft":0,"vllm_async":0,"multimodal":0,"tools_agents":0,"distributed_perf":0,"metrics_logging":0,"new_methods":0,"install_cli":0,"ci_tests":0,"docs_examples":0,"other":0}},"eligible":["bge-base-en-v1.5+LR","bge-base-en-v1.5+rules+LR"],"best_f1":0.6391},"mode":"local"},"available":true,"provenance":{"gold-prelabel":206,"model:ModernBERT-base_issue-type":2},"gold_reviewed":false,"types_ok":true,"themes_ok":true,"pain_map":[{"theme":"ci_tests","cur":44,"prior":16,"open":11,"open_share":0.177,"median_days_to_close":0.74,"examples":[[7202,"Audit the trl-internal-testing repos that have no generation script"],[7137,"Align tiny test model configs with their reference models"],[6555,"Remove kernels-community/mamba-ssm autocast warning filter once the Hub kernel build stops calling `torch.get_autocast_gpu_dtype()`"]]},{"theme":"online_rl","cur":27,"prior":16,"open":14,"open_share":0.237,"median_days_to_close":31.74,"examples":[[6789,"GRPO: vLLM importance-sampling ratio is biased when top_p/top_k/min_p truncate sampling"],[6221,"[Feature] Reasoning reward utilities: group-relative length-scaled accuracy (GRPO-LEAD) + graduated format reward"],[6151,"Support router-based multi-teacher (MOPD) distillation in DistillationTrainer"]]},{"theme":"sft","cur":22,"prior":8,"open":8,"open_share":0.25,"median_days_to_close":5.79,"examples":[[7511,"BEMACallback fails at train start with ordinary PEFT LoRA"],[7480,"BEMACallback breaks when any parameter is frozen"],[7526,"SFTTrainer and RewardTrainer modify the caller's peft_config when chat_template_path adds tokens"]]},{"theme":"vllm_async","cur":21,"prior":12,"open":16,"open_share":0.471,"median_days_to_close":47.92,"examples":[[5975,"Add adapter-only vLLM LoRA sync for GRPO and AsyncGRPO"],[5742,"[AsyncGRPO] `AsyncGRPO` `add_response_schema` not gated on `self.tools` (diverges from `GRPOTrainer`)"],[6945,"AsyncGRPO has no importance-sampling correction, but TRL still imposes --logprobs-mode processed_logprobs on its server"]]},{"theme":"preference","cur":19,"prior":7,"open":7,"open_share":0.226,"median_days_to_close":11.39,"examples":[[5662,"TPOTrainer.evaluate() returns NaN eval_loss while training loss is finite"],[6806,"OnlineDPO/XPO/Nash-MD: list-valued beta/alpha/mixture_coef epoch schedules crash (list indexed with float state.epoch)"],[6877,"Bug: unpair IterableDatasetDict preference datasets"]]},{"theme":"install_cli","cur":15,"prior":1,"open":7,"open_share":0.368,"median_days_to_close":5.1,"examples":[[7116,"Agree on an explicit criterion for raising a dependency version floor"],[6649,"Make config files the primary interface: `trl train config.yaml`"],[6981,"🐛 [Bug] get_dataset raises ZeroDivisionError for zero-sum fractions"]]},{"theme":"multimodal","cur":14,"prior":5,"open":10,"open_share":0.435,"median_days_to_close":36.71,"examples":[[6294,"GRPO + vLLM corrupts SmolVLM multimodal prompts from pre-expanded image tokens"],[6617,"Training a VLM on a text-only dataset leaves the vision tower trainable — DDP crash, and wasted optimizer state even on one GPU"],[6832,"RFC: Add end-to-end vision-language model support to SDPOTrainer"]]},{"theme":"metrics_logging","cur":14,"prior":1,"open":2,"open_share":0.125,"median_days_to_close":14.69,"examples":[[7482,"AsyncGRPOTrainer and AsyncDistillationTrainer log the wrong `epoch` with the epoch-driven stop"],[6809,"Metrics-only inaccuracies in RL trainers: unmasked stats (OnlineDPO, PPO), wrong XPO logps metric, GRPO policy_loss only logged with entropy bonus"]]},{"theme":"distributed_perf","cur":13,"prior":3,"open":8,"open_share":0.32,"median_days_to_close":4.75,"examples":[[3399,"FP8 training"],[7063,"[Tracking] Move off liger-kernel and make the memory-efficient loss the default"],[6470,"`precompute_ref_log_probs=True` crashes under FSDP2 (device mismatch)"]]},{"theme":"docs_examples","cur":7,"prior":1,"open":2,"open_share":0.125,"median_days_to_close":8.05,"examples":[[6773,"Nemotron 3 SFT example uses target_modules that may not exist in hybrid architecture"],[7353,"`rollout_func` docstring says prompts have \"no duplication\", but each prompt is already repeated `num_generations` times"]]},{"theme":"tools_agents","cur":5,"prior":12,"open":2,"open_share":0.1,"median_days_to_close":42.98,"examples":[[6354,"[harbor/openreward] Adopt environment-owned reward (#6238) and dataset (#6349)"],[7503,"Async GRPO does not train Gemma 4's tool-calling turns"]]},{"theme":"new_methods","cur":4,"prior":4,"open":3,"open_share":0.273,"median_days_to_close":105.99,"examples":[[6473,"Implement single-rollout asynchronous optimization"],[7402,"[Feature request] C-GRPO: conformal adaptive rollout budgets for GRPO (NeurIPS 2026)"],[7520,"Add score centering to GRPO for vLLM training-inference mismatch"]]},{"theme":"other","cur":1,"prior":0,"open":1,"open_share":0.5,"median_days_to_close":null,"examples":[[7182,"[RFC] Criteria for removing code from `trl.experimental`"]]}]}},"charts":{"issue_flow":{"opened":[["2026-04-06",6],["2026-04-13",6],["2026-04-20",10],["2026-04-27",4],["2026-05-04",6],["2026-05-11",6],["2026-05-18",6],["2026-05-25",8],["2026-06-01",3],["2026-06-08",8],["2026-06-15",10],["2026-06-22",5],["2026-06-29",7],["2026-07-06",4],["2026-07-13",9],["2026-07-20",17],["2026-07-27",10],["2026-08-03",14],["2026-08-10",12],["2026-08-17",32],["2026-08-24",14],["2026-08-31",27],["2026-09-07",12],["2026-09-14",17],["2026-09-21",12],["2026-09-28",23]],"closed":[["2026-04-06",3],["2026-04-13",3],["2026-04-20",9],["2026-04-27",6],["2026-05-04",3],["2026-05-11",4],["2026-05-18",36],["2026-05-25",41],["2026-06-01",59],["2026-06-08",47],["2026-06-15",69],["2026-06-22",54],["2026-06-29",58],["2026-07-06",50],["2026-07-13",63],["2026-07-20",43],["2026-07-27",36],["2026-08-03",10],["2026-08-10",8],["2026-08-17",22],["2026-08-24",9],["2026-08-31",12],["2026-09-07",10],["2026-09-14",21],["2026-09-21",17],["2026-09-28",25]]},"pr_flow":{"opened":[["2026-04-06",26],["2026-04-13",63],["2026-04-20",52],["2026-04-27",34],["2026-05-04",41],["2026-05-11",29],["2026-05-18",41],["2026-05-25",58],["2026-06-01",69],["2026-06-08",77],["2026-06-15",68],["2026-06-22",55],["2026-06-29",86],["2026-07-06",64],["2026-07-13",72],["2026-07-20",84],["2026-07-27",69],["2026-08-03",45],["2026-08-10",55],["2026-08-17",72],["2026-08-24",75],["2026-08-31",73],["2026-09-07",96],["2026-09-14",86],["2026-09-21",86],["2026-09-28",75]],"merged":[["2026-04-06",15],["2026-04-13",38],["2026-04-20",35],["2026-04-27",23],["2026-05-04",37],["2026-05-11",18],["2026-05-18",23],["2026-05-25",27],["2026-06-01",41],["2026-06-08",46],["2026-06-15",62],["2026-06-22",24],["2026-06-29",75],["2026-07-06",42],["2026-07-13",46],["2026-07-20",77],["2026-07-27",42],["2026-08-03",8],["2026-08-10",28],["2026-08-17",49],["2026-08-24",47],["2026-08-31",35],["2026-09-07",64],["2026-09-14",52],["2026-09-21",47],["2026-09-28",54]]},"backlog_age":{"0-7d":19,"7-30d":23,"30-90d":41,">90d":25},"ttm_dist":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.04,0.04,0.04,0.04,0.04,0.05,0.05,0.06,0.06,0.06,0.06,0.07,0.07,0.07,0.07,0.07,0.08,0.08,0.09,0.09,0.09,0.09,0.09,0.11,0.11,0.11,0.12,0.12,0.13,0.13,0.14,0.14,0.14,0.14,0.15,0.15,0.15,0.15,0.15,0.16,0.16,0.16,0.17,0.18,0.18,0.18,0.19,0.2,0.2,0.21,0.22,0.22,0.22,0.22,0.23,0.23,0.23,0.23,0.26,0.27,0.29,0.33,0.36,0.37,0.37,0.37,0.37,0.38,0.38,0.38,0.38,0.38,0.38,0.39,0.39,0.4,0.4,0.41,0.47,0.48,0.5,0.51,0.51,0.52,0.52,0.52,0.53,0.54,0.58,0.58,0.61,0.62,0.63,0.63,0.64,0.65,0.65,0.66,0.66,0.66,0.66,0.67,0.67,0.67,0.67,0.67,0.68,0.69,0.69,0.69,0.7,0.72,0.72,0.72,0.74,0.74,0.74,0.75,0.76,0.76,0.76,0.76,0.77,0.77,0.77,0.77,0.78,0.78,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.8,0.8,0.8,0.8,0.8,0.8,0.81,0.81,0.82,0.82,0.82,0.82,0.82,0.82,0.82,0.83,0.83,0.83,0.83,0.83,0.83,0.83,0.83,0.83,0.84,0.85,0.85,0.85,0.86,0.87,0.87,0.87,0.88,0.88,0.88,0.89,0.89,0.89,0.89,0.89,0.9,0.9,0.91,0.91,0.91,0.92,0.92,0.92,0.94,0.94,0.94,0.95,0.95,0.96,0.96,0.97,0.97,0.97,0.97,0.98,0.98,0.98,0.98,0.99,1.0,1.0,1.0,1.0,1.0,1.01,1.01,1.02,1.02,1.03,1.04,1.04,1.04,1.05,1.08,1.09,1.11,1.11,1.13,1.13,1.13,1.13,1.16,1.17,1.19,1.19,1.2,1.22,1.25,1.31,1.4,1.48,1.49,1.5,1.5,1.51,1.52,1.53,1.56,1.56,1.59,1.6,1.62,1.62,1.64,1.64,1.66,1.7,1.7,1.76,1.76,1.77,1.83,1.83,1.83,1.83,1.83,1.83,1.87,1.88,1.9,1.91,1.92,1.94,1.94,1.97,1.98,1.99,1.99,2.0,2.01,2.01,2.03,2.04,2.04,2.05,2.06,2.06,2.08,2.09,2.1,2.15,2.18,2.2,2.23,2.27,2.59,2.6,2.6,2.61,2.63,2.63,2.63,2.64,2.67,2.67,2.69,2.71,2.71,2.71,2.71,2.73,2.74,2.76,2.77,2.78,2.78,2.8,2.8,2.81,2.82,2.82,2.83,2.84,2.87,2.87,2.89,2.89,2.93,2.94,2.95,2.97,2.98,2.98,2.98,2.98,3.04,3.08,3.1,3.11,3.14,3.16,3.16,3.16,3.19,3.19,3.24,3.28,3.36,3.36,3.37,3.4,3.44,3.46,3.52,3.62,3.63,3.69,3.72,3.73,3.75,3.76,3.77,3.78,3.79,3.83,3.83,3.83,3.85,3.87,3.89,3.9,3.98,4.01,4.01,4.01,4.01,4.06,4.07,4.1,4.12,4.13,4.16,4.2,4.28,4.32,4.35,4.37,4.53,4.53,4.72,4.72,4.74,4.75,4.76,4.79,4.8,4.8,4.8,4.83,4.87,4.89,4.9,4.96,4.98,5.12,5.24,5.27,5.31,5.35,5.39,5.42,5.55,5.55,5.67,5.72,5.73,5.75,5.82,5.86,5.87,5.88,5.89,5.9,5.92,5.99,6.0,6.04,6.15,6.23,6.27,6.33,6.4,6.4,6.5,6.65,6.74,6.76,6.83,6.87,6.98,7.0,7.0,7.03,7.04,7.1,7.36,7.48,7.54,7.75,7.8,7.86,7.92,8.01,8.03,8.04,8.18,8.18,8.21,8.25,8.68,9.03,9.26,9.33,9.41,9.53,9.59,9.61,9.63,9.65,9.66,9.66,9.68,9.69,9.69,9.69,9.71,9.71,9.71,9.71,9.77,9.82,9.83,10.0,10.1,10.5,10.69,10.69,10.82,10.87,10.97,11.72,11.96,13.19,13.46,13.67,13.93,14.15,14.23,15.91,17.22,17.8,18.0,18.14,18.74,20.05,20.27,22.95,24.24,24.64,24.86,31.07,34.91,35.05,35.87,36.8,37.24,38.96,39.94,40.9,41.61,41.87,42.04,42.97,43.1,43.11,47.23,51.99,62.86,65.17,68.56,78.85,81.06,101.74,128.22,130.57,135.1,201.7,252.74],"resp_dist":[0.0,0.0,0.02,0.03,0.03,0.03,0.06,0.09,0.11,0.12,0.18,0.23,0.3,0.4,0.6,0.6,0.71,0.73,0.81,0.89,1.32,1.42,1.55,1.87,1.96,1.96,2.84,2.99,3.32,4.74,5.95,6.37,7.23,7.57,8.05,9.53,9.53,14.21,15.44,29.54,31.79,32.07,36.16,36.51,39.41,41.46,43.3,45.87,49.83,56.92,64.78,82.77],"pr_authors":[["maintainer A",291],["maintainer B",220],["contributor 1",42],["maintainer F",42],["maintainer C",29],["maintainer E",16],["maintainer D",16],["contributor 2",11],["contributor 3",10],["contributor 4",9],["contributor 5",6],["contributor 6",6]],"mergers":[["maintainer A",296],["maintainer B",242],["maintainer C",22],["maintainer D",19],["maintainer E",12]],"forks_weekly":[["2026-04-06",4],["2026-04-13",20],["2026-04-20",21],["2026-04-27",24],["2026-05-04",12],["2026-05-11",20],["2026-05-18",20],["2026-05-25",18],["2026-06-01",17],["2026-06-08",19],["2026-06-15",12],["2026-06-22",9],["2026-06-29",18],["2026-07-06",17],["2026-07-13",14],["2026-07-20",20],["2026-07-27",21],["2026-08-03",17],["2026-08-10",17],["2026-08-17",19],["2026-08-24",17],["2026-08-31",29],["2026-09-07",18],["2026-09-14",32],["2026-09-21",14],["2026-09-28",26]],"pypi_weekly":[["2026-04-06",584360],["2026-04-13",933450],["2026-04-20",933937],["2026-04-27",773361],["2026-05-04",1001234],["2026-05-11",997166],["2026-05-18",859134],["2026-05-25",767833],["2026-06-01",697925],["2026-06-08",713040],["2026-06-15",729459],["2026-06-22",1382897],["2026-06-29",860779],["2026-07-06",735090],["2026-07-13",900444],["2026-07-20",799285],["2026-07-27",875593],["2026-08-03",958605],["2026-08-10",1070097],["2026-08-17",1054374],["2026-08-24",594353],["2026-08-31",559380],["2026-09-07",572403],["2026-09-14",646576],["2026-09-21",613168],["2026-09-28",563328]],"pypi_system":[["Linux",7926602],["Windows",1028925],["Darwin",703621],["null",27594],["other",636]],"pypi_python_minor":[["3.12",3754391],["3.13",3401854],["3.11",1287565],["3.10",870451],["3.14",310927],["null",37096],["3.9",15451],["3.7",7673],["3.8",1742],["3.15",199],["3.6",28],["3.5",1]],"module_churn":[["tests",34685,19147,264],["experimental",27233,24767,145],["examples",9340,6089,30],["trl",8848,1927,60],["trainer",7503,5476,154],["docs",6308,3438,113],["chat_templates",4451,3914,18],["scripts",1722,3842,60],["ci",1371,445,76],["other",1305,91,45],["generation",1059,132,9],["kernels",291,0,1],["packaging",228,76,42],["models",214,106,9],["cli",52,0,3]],"hotspot_files":[["trl/experimental/distillation/distillation_trainer.py",3427],["tests/test_grpo_trainer.py",3011],["tests/test_dpo_loss.py",2894],["tests/experimental/test_distillation_trainer.py",2864],["tests/test_grpo_loss.py",2206],["trl/experimental/iw_opd/iw_opd_trainer.py",2068],["examples/notebooks/grpo_functiongemma_browsergym_openenv.ipynb",1914],["tests/test_utils.py",1852],["trl/experimental/async_distillation/async_distillation_trainer.py",1767],["tests/experimental/test_async_grpo_trainer.py",1755],["trl/experimental/bco/bco_trainer.py",1633],["trl/experimental/async_grpo/async_grpo_trainer.py",1545]],"commit_authors":[["author 1",275],["author 2",199],["author 3",24],["maintainer D",15],["author 5",14],["author 6",8],["author 7",4],["author 8",3]],"ci_weekly":[["2026-04-06",1.0,16],["2026-04-13",1.0,39],["2026-04-20",1.0,36],["2026-04-27",1.0,23],["2026-05-04",1.0,38],["2026-05-11",1.0,20],["2026-05-18",1.0,23],["2026-05-25",0.931,29],["2026-06-01",0.93,43],["2026-06-08",0.972,36],["2026-06-15",0.959,49],["2026-06-22",1.0,22],["2026-06-29",0.96,50],["2026-07-06",1.0,42],["2026-07-13",1.0,15],["2026-07-20",1.0,65],["2026-07-27",1.0,23],["2026-08-03",1.0,8],["2026-08-10",1.0,16],["2026-08-17",1.0,20],["2026-08-24",1.0,34],["2026-08-31",1.0,18],["2026-09-07",1.0,50],["2026-09-14",1.0,30],["2026-09-21",1.0,29],["2026-09-28",1.0,27]],"module_loc":[["experimental",28980],["trainer",20423],["trl",5631],["generation",1664],["models",1331],["rewards",573],["kernels",565],["cli",405]],"type_counts":{"classes":["bug","enhancement","question","unclassified"],"cur":{"bug":[156,156,157],"enhancement":[45,44,45],"question":[7,7,8],"unclassified":[0,0,0]},"prior":{"bug":55,"enhancement":29,"question":2},"reportable":true},"theme_counts":{"classes":["online_rl","preference","sft","vllm_async","multimodal","tools_agents","distributed_perf","metrics_logging","new_methods","install_cli","ci_tests","docs_examples","other","unclassified"],"cur":{"online_rl":[27,27,28],"preference":[19,19,20],"sft":[22,22,23],"vllm_async":[21,21,22],"multimodal":[14,14,15],"tools_agents":[5,5,6],"distributed_perf":[13,13,14],"metrics_logging":[14,14,15],"new_methods":[4,4,5],"install_cli":[15,15,16],"ci_tests":[44,44,45],"docs_examples":[7,7,8],"other":[1,1,2],"unclassified":[2,0,1]},"prior":{"distributed_perf":3,"ci_tests":16,"vllm_async":12,"multimodal":5,"sft":8,"preference":7,"online_rl":16,"new_methods":4,"docs_examples":1,"tools_agents":12,"metrics_logging":1,"install_cli":1},"reportable":true}},"families":{"flow":["issues_opened","issues_closed","issue_backlog_net","open_issues","open_issues_over_90d","unanswered_open_issues","median_first_response_days","p90_first_response_days","response_within_7d","median_pr_first_response_days","prs_opened","prs_merged","pr_merge_rate","external_pr_merge_rate","median_time_to_merge_days","median_time_to_merge_external_days","stale_open_prs","external_pr_share","external_merged_share","pr_contributors","new_contributors","issue_reporters","top_merger_share","top_author_pr_share"],"adoption":["stars_total","stars_new","stars_growth_rate","forks_total","forks_new","forks_active","pypi_downloads","releases","days_since_release","dependents"],"code":["commits","commit_authors","bus_factor","top_committer_share","modules_single_owner","ci_pass_rate_main","ci_pass_rate_pr","ci_median_minutes","test_loc_ratio","critical_deps_behind","critical_deps_unbounded"],"themes":["bug_share","classifier_coverage","top_theme_share"]}},"narrative":{"author":"Claude Opus 5.5 (agent session, from the metrics digest)","headline":"A fast, healthy core team: 601 PRs merged and 22 releases, but outside contributors now get merged far less often.","headline_metrics":["prs_merged","releases","external_pr_merge_rate"],"summary_title":"Shipping is strong; the community side is falling behind","findings":[{"text":"External contributions land less often and later: 18.4% of closed external PRs were merged (38.5% prior), after a median 3.83 days (1.01 prior).","metrics":["external_pr_merge_rate","median_time_to_merge_external_days"],"severity":"high"},{"text":"Issue inflow more than doubled to 208 from 86, and the share answered by a maintainer within 7 days fell to 31% from 40%.","metrics":["issues_opened","response_within_7d"],"severity":"medium"},{"text":"Delivery is excellent: 601 PRs merged, 22 releases, 318 issues closed, and main CI passed 100% of 375 runs.","metrics":["prs_merged","releases","issues_closed","ci_pass_rate_main"],"severity":"low"}],"nutshells":{"flow":{"text":"The team ships fast (601 PRs merged, backlog down by 110), but external PRs are merged 18.4% of the time versus 38.5% before, and only 31% of issues get a reply within 7 days.","metrics":["prs_merged","issue_backlog_net","external_pr_merge_rate","response_within_7d"]},"adoption":{"text":"A release almost every four days (22 this window, the last one today), 254 new forks, and 9,687,378 PyPI downloads, 14% below the prior window.","metrics":["releases","days_since_release","forks_new","pypi_downloads"]},"code":{"text":"592 commits from 48 authors with main CI at 100%; bus factor is 2 and the top committer wrote 47% of commits.","metrics":["commits","commit_authors","ci_pass_rate_main","bus_factor","top_committer_share"]}},"slides":{"flow":{"title":"The issue backlog keeps shrinking despite doubled inflow","so_what":"318 issues closed against 208 opened cut the backlog by 110; only 25 of 108 open issues are older than 90 days.","metrics":["issues_closed","issues_opened","issue_backlog_net","open_issues_over_90d","open_issues"]},"responsiveness":{"title":"Replies are quick when they come, but fewer issues get one in a week","so_what":"The median first reply is 2.4 days, yet only 31% of issues were answered within 7 days (40% prior).","metrics":["median_first_response_days","response_within_7d"]},"contributors":{"title":"More newcomers arrive, but fewer of their PRs land","so_what":"116 first-time PR authors (83 prior), yet only 10.5% of merged PRs came from outside the team (21.5% prior).","metrics":["new_contributors","external_merged_share"]},"adoption":{"title":"Releases are frequent; downloads dipped","so_what":"22 releases this window and the latest one today; PyPI downloads fell 14% to 9,687,378.","metrics":["releases","days_since_release","pypi_downloads"]},"code":{"title":"Two maintainers carry most of the code and the merges","so_what":"Bus factor is 2; the top merger performed 49% of merges and the top committer wrote 47% of commits.","metrics":["bus_factor","top_merger_share","top_committer_share"]},"quality":{"title":"Main is green and CI got faster","so_what":"Main CI passed 100% of runs (97.7% prior) and its median duration fell to 1.28 minutes from 2.2.","metrics":["ci_pass_rate_main","ci_median_minutes"]},"themes":{"title":"CI breakages from upstream releases lead new reports","so_what":"ci_tests drew 44 new issues (16 prior); online_rl rose to 27 from 16 and sft to 22 from 8.","metrics":["top_theme_share"]}},"recs_title":"Improvement plan proposal","recommendations":[{"priority":1,"text":"Give external PRs a review lane","issue":"Only 18.4% of closed external PRs were merged (38.5% prior), after a median 3.83 days (1.01 prior); 33 PRs are idle.","outcome":"Community contributors get a clear yes or no quickly, and good outside work lands instead of going stale.","actions":["Label external PRs on open and assign a reviewer from CODEOWNERS","Set a three-day first-review goal","Close idle PRs with a thank-you template"],"owner":"maintainers (rotating)","effort":"M","horizon":"this quarter","target":"External merge rate back above 30%; under 15 idle PRs","metrics":["external_pr_merge_rate","median_time_to_merge_external_days","stale_open_prs"]},{"priority":2,"text":"Add a weekly issue triage rotation","issue":"Issue inflow rose to 208 from 86 and only 31% got a maintainer reply within 7 days (40% prior).","outcome":"Reporters hear back within a week, and bugs reach the trainer owner before they pile up.","actions":["Rotate a weekly triager","Route issues by trainer label","Use saved replies for version and repro requests"],"owner":"maintainers (rotating)","effort":"S","horizon":"2 weeks","target":"At least half of issues answered within 7 days","metrics":["response_within_7d","issues_opened"]},{"priority":3,"text":"Share merge and review ownership more widely","issue":"Bus factor is 2: the top merger performed 49% of merges and the top committer wrote 47% of commits.","outcome":"Reviews keep flowing when either lead is away, and module owners decide on their own areas.","actions":["Name an owner per trainer family","Grant merge rights to module owners","Track merges per owner each release"],"owner":"lead maintainers","effort":"M","horizon":"next quarter","target":"Bus factor of 3; top merger under 40% of merges","metrics":["bus_factor","top_merger_share","top_committer_share"]},{"priority":4,"text":"Catch upstream breakages before they reach main","issue":"ci_tests is the top theme with 44 new issues (16 prior), mostly failures against dev or minimum dependency versions.","outcome":"Upstream releases stop interrupting feature work, and CI issues are fixed in one place.","actions":["Run the dev-dependency job nightly with an owner","Group failures by upstream package in one tracking issue","Pin known-bad versions quickly"],"owner":"CI owner","effort":"S","horizon":"this quarter","target":"Fewer new CI issues than this window","metrics":["top_theme_share"]}],"dropped":[],"source":"Claude Opus 5.5 (agent session, from the metrics digest) — narrative-input-2026-10-06.json","metrics_hash":"26116a7138fc","usage":{"model":null,"input_tokens":0,"output_tokens":0}},"classifier":{"gold_reviewed":false,"rule":"among candidates within 3% macro-F1 of the best with calibrated ECE ≤ 0.1: lowest API cost, then highest coverage at 85% precision, then fastest","types":{"model":"ModernBERT-base_issue-type","passed":true,"reason":"meets gate","macro_f1":0.898,"ece":0.0282,"accuracy":0.9444,"temperature":0.822,"threshold":0.4429,"coverage":1.0,"selective_precision":0.944,"eligible":["ModernBERT-base_issue-type"],"best_f1":0.898},"themes":{"model":"bge-base-en-v1.5+LR","passed":false,"reason":"macro-F1 0.62 < 0.7","macro_f1":0.6232,"ece":0.0927,"accuracy":0.7083,"temperature":0.314,"threshold":0.5627,"coverage":0.688,"selective_precision":0.818,"eligible":["bge-base-en-v1.5+LR","bge-base-en-v1.5+rules+LR"],"best_f1":0.6391},"mode":"local"},"headline_kpis":["issues_opened","prs_merged","response_within_7d","bus_factor","pypi_downloads"],"scorecard":[{"id":"flow","title":"Community & flow","tables":{"Responsiveness & backlog":["response_within_7d","median_first_response_days","unanswered_open_issues","open_issues_over_90d","stale_open_prs"],"Contributions":["external_pr_share","new_contributors","pr_merge_rate","external_pr_merge_rate","median_time_to_merge_external_days","top_merger_share"]}},{"id":"adoption","title":"Adoption & reach","tables":{"Reach":["stars_new","forks_new","forks_active","pypi_downloads"],"Releases":["releases","days_since_release"]}},{"id":"code","title":"Codebase, quality & issue themes","tables":{"Ownership & quality":["bus_factor","top_committer_share","modules_single_owner","ci_pass_rate_main","ci_pass_rate_pr","backends_with_tests","critical_deps_behind","critical_deps_unbounded"],"Issue themes":["bug_share","top_theme_share","classifier_coverage"]}}],"target_precision":0.85,"previous_targets":[],"token_report":{"summary":"narrative: 0 in / 0 out tokens (Claude Opus 5.5 (agent session, from the metrics digest) — narrative-input-2026-10-06.json); issue triage: API model typesafe-jev","narrative":{"model":null,"input_tokens":0,"output_tokens":0}},"note":"Example snapshot as of 2026-10-06, not an assessment by the maintainers: issue labels are unreviewed and people are shown by role."}</script>
+<script>/* repo-pulse deck renderer: data.json -> slides. No dependencies; charts are inline SVG. */
+(function () {
+  const D = JSON.parse(document.getElementById("data").textContent);
+  const M = D.metrics, K = M.kpis, C = M.charts, X = M.context, N = D.narrative || {}, B = D.classifier || {};
+  const deck = document.getElementById("deck");
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // ---------- formatting
+  function fmt(v, unit) {
+    if (v === null || v === undefined) return "—";
+    if (unit === "ratio") return (v > 0 && v < 0.1 ? (v * 100).toFixed(1) : Math.round(v * 100)) + "%";
+    if (unit === "days") return v < 1 ? (v * 24).toFixed(v * 24 < 10 ? 1 : 0) + " h" : (v < 10 ? v.toFixed(1) : Math.round(v)) + " d";
+    if (unit === "min") return v.toFixed(1) + " min";
+    if (typeof v === "number") return Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en-US") : (Number.isInteger(v) ? String(v) : v.toFixed(2));
+    return String(v);
+  }
+  function deltaHtml(m) {
+    if (m.prior === null || m.prior === undefined || typeof m.value !== "number") return "";
+    const d = m.value - m.prior;
+    if (Math.abs(d) < 1e-9) return `<span class="delta flat">= prior</span>`;
+    const dir = m.direction || (m.lower_is_better ? "down" : "up");
+    const better = dir === "down" ? d < 0 : d > 0;
+    const cls = dir === "neutral" ? "flat" : better ? "good" : "bad";
+    const arrow = d > 0 ? "▲" : "▼";
+    let txt;
+    if (m.unit === "ratio") txt = (d > 0 ? "+" : "−") + Math.abs(Math.round(d * 100)) + " pts";
+    else if (m.prior > 0 && m.value > 0 && m.value / m.prior >= 3) txt = "×" + (m.value / m.prior).toFixed(1);
+    else if (m.prior <= 0 || m.value < 0) txt = (d > 0 ? "+" : "−") + fmt(Math.abs(d), m.unit);  // % change is meaningless across zero
+    else if (m.prior !== 0 && Math.abs(m.prior) >= 1) txt = (d > 0 ? "+" : "−") + Math.abs(Math.round((d / Math.abs(m.prior)) * 100)) + "%";
+    else txt = (d > 0 ? "+" : "−") + fmt(Math.abs(d), m.unit);
+    const title = dir === "neutral" ? "change vs prior window (neither good nor bad by itself)" : (better ? "improving" : "worsening") + " vs prior window";
+    return `<span class="delta ${cls}" title="${title}">${arrow} ${txt}</span>`;
+  }
+  const STATUS = { green: "on track", amber: "watch", red: "at risk", na: "" };
+  const chip = (s) => (s && s !== "na" ? `<span class="chip ${s}"><i></i>${STATUS[s]}</span>` : "");
+  function tile(key, opts = {}) {
+    const m = K[key];
+    if (!m) return "";
+    const prior = m.prior !== null && m.prior !== undefined ? `<span>prior ${fmt(m.prior, m.unit)}</span>` : "";
+    const unitSuffix = m.unit && !["ratio", "days", "min"].includes(m.unit) ? ` <span class="small muted">${esc(m.unit)}</span>` : "";
+    return `<div class="card tile" title="${esc(m.note || "")}"><div class="lbl">${esc(opts.label || m.label)}${m.note && opts.note !== true ? ' <span class="info" aria-hidden="true">ⓘ</span>' : ""}</div>
+      <div class="val">${fmt(m.value, m.unit)}${unitSuffix}</div><div class="sub">${deltaHtml(m)}${prior}${chip(m.status)}</div>
+      ${m.note && opts.note === true ? `<div class="small muted" style="margin-top:4px">${esc(m.note)}</div>` : ""}</div>`;
+  }
+  const cite = (keys) => (keys && keys.length ? `<div class="cite">${keys.map(esc).join(" · ")}</div>` : "");
+
+  // ---------- tooltip
+  const tip = document.getElementById("tip");
+  document.addEventListener("pointermove", (e) => {
+    const t = e.target.closest && e.target.closest("[data-tip]");
+    if (!t) { tip.style.opacity = 0; return; }
+    tip.innerHTML = t.getAttribute("data-tip");
+    const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+    const y = Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
+    tip.style.left = x + "px"; tip.style.top = y + "px"; tip.style.opacity = 1;
+  });
+
+  // ---------- charts
+  const niceMax = (v) => { if (v <= 0) return 1; if (v <= 1) return 1; const raw = v / 4; const p = Math.pow(10, Math.floor(Math.log10(raw))); const n = raw / p; const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; return Math.max(step, raw >= 1 ? Math.ceil(step) : step) * 4; };
+  const shortDate = (s) => { const d = new Date(s + "T00:00:00Z"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }); };
+
+  /** Weekly series line chart; shades the current window. series: [{name, color, points:[[date, v]]}] */
+  const tickFmt = (v) => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en-US") : Number.isInteger(v) ? String(v) : v.toFixed(1));
+  function lineChart(series, { h = 220, W = 640, yFmt = tickFmt, unit = "", windowStart = M.windows.cur[0], yMax = null } = {}) {
+    const pad = { l: 40, r: 12, t: 10, b: 24 };
+    const xs = series[0].points.map((p) => p[0]);
+    const vals = series.flatMap((s) => s.points.map((p) => p[1]).filter((v) => v !== null));
+    const max = yMax ?? niceMax(Math.max(...vals, 0));
+    const x = (i) => pad.l + (i / Math.max(xs.length - 1, 1)) * (W - pad.l - pad.r);
+    const y = (v) => h - pad.b - (v / max) * (h - pad.t - pad.b);
+    const wi = xs.findIndex((d) => d >= windowStart);
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" role="img">`;
+    if (wi >= 0) s += `<rect class="band" x="${x(wi)}" y="${pad.t}" width="${W - pad.r - x(wi)}" height="${h - pad.t - pad.b}"/>` +
+      `<text x="${x(wi) + 4}" y="${pad.t + 11}">current window</text>`;
+    for (let k = 0; k <= 4; k++) { const v = (max / 4) * k; s += `<line class="gridline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${yFmt(v)}</text>`; }
+    s += `<line class="baseline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}"/>`;
+    const step = Math.ceil(xs.length / 6);
+    xs.forEach((d, i) => { if (i % step === 0) s += `<text x="${x(i)}" y="${h - 6}" text-anchor="middle">${shortDate(d)}</text>`; });
+    series.forEach((se) => {
+      let dpath = "", pen = false;
+      se.points.forEach((p, i) => { if (p[1] === null) { pen = false; return; } dpath += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(p[1]).toFixed(1); pen = true; });
+      s += `<path d="${dpath}" fill="none" stroke="${se.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      const last = se.points.length - 1;
+      if (se.points[last][1] !== null) s += `<circle cx="${x(last)}" cy="${y(se.points[last][1])}" r="4" fill="${se.color}" stroke="var(--surface)" stroke-width="2"/>`;
+    });
+    // hover columns
+    xs.forEach((d, i) => {
+      const w = (W - pad.l - pad.r) / Math.max(xs.length - 1, 1);
+      const tipTxt = `<b>week of ${shortDate(d)}</b><br>` + series.map((se) => `<span style="color:${se.color}">●</span> ${esc(se.name)}: ${se.points[i][1] === null ? "—" : yFmt(se.points[i][1])}${unit}`).join("<br>");
+      s += `<rect class="hit" x="${x(i) - w / 2}" y="${pad.t}" width="${w}" height="${h - pad.t - pad.b}" data-tip="${esc(tipTxt)}"/>`;
+    });
+    return s + "</svg>";
+  }
+  function legend(items) { return `<div class="legend">${items.map(([n, c]) => `<span><i style="background:${c}"></i>${esc(n)}</span>`).join("")}</div>`; }
+
+  /** Vertical bars for a weekly series (single measure). */
+  function weeklyBars(points, { h = 200, W = 640, color = "var(--s1)", name = "", windowStart = M.windows.cur[0] } = {}) {
+    const pad = { l: 44, r: 8, t: 10, b: 24 };
+    const vals = points.map((p) => p[1] ?? 0);
+    const max = niceMax(Math.max(...vals, 0));
+    const bw = (W - pad.l - pad.r) / points.length;
+    const y = (v) => h - pad.b - (v / max) * (h - pad.t - pad.b);
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" role="img">`;
+    const wi = points.findIndex((p) => p[0] >= windowStart);
+    if (wi >= 0) s += `<rect class="band" x="${pad.l + wi * bw}" y="${pad.t}" width="${W - pad.r - pad.l - wi * bw}" height="${h - pad.t - pad.b}"/>`;
+    for (let k = 0; k <= 4; k++) { const v = (max / 4) * k; s += `<line class="gridline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${tickFmt(v)}</text>`; }
+    const step = Math.ceil(points.length / 6);
+    points.forEach((p, i) => {
+      const x0 = pad.l + i * bw + 1, w = Math.max(bw - 2, 1);
+      if (p[1] !== null && p[1] > 0) {
+        const top = y(p[1]), r = Math.min(4, w / 2, (y(0) - top));
+        s += `<path class="mark" fill="${color}" d="M${x0},${y(0)} V${top + r} q0,-${r} ${r},-${r} H${x0 + w - r} q${r},0 ${r},${r} V${y(0)} Z"/>`;
+      }
+      s += `<rect class="hit" x="${x0}" y="${pad.t}" width="${w}" height="${h - pad.t - pad.b}" data-tip="${esc(`<b>week of ${shortDate(p[0])}</b><br>${name}: ${p[1] === null ? "—" : fmt(p[1])}`)}"/>`;
+      if (i % step === 0) s += `<text x="${x0 + w / 2}" y="${h - 6}" text-anchor="middle">${shortDate(p[0])}</text>`;
+    });
+    s += `<line class="baseline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}"/>`;
+    return s + "</svg>";
+  }
+
+  /** Horizontal bars. rows: [{label, value, prior?, lo?, hi?, color?, tip?, note?}] */
+  const EMPTY = (msg = "Nothing in this window.") => `<div class="empty">${esc(msg)}</div>`;
+  function hbars(rows, { labelW = 150, valFmt = (v) => fmt(v), max = null, priorName = "prior window", rowH = 26, W = 640, empty } = {}) {
+    if (!rows.length || rows.every((r) => !r.value && !r.prior)) return EMPTY(empty);
+    const pad = { t: 4, b: 4, r: 56 };
+    const h = pad.t + pad.b + rows.length * rowH;
+    const mx = max ?? niceMax(Math.max(...rows.map((r) => Math.max(r.value ?? 0, r.hi ?? 0, r.prior ?? 0)), 0.0001));
+    const x = (v) => labelW + (v / mx) * (W - labelW - pad.r);
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" role="img">`;
+    rows.forEach((r, i) => {
+      const yc = pad.t + i * rowH + rowH / 2, bh = 14;
+      s += `<text class="lab" x="${labelW - 8}" y="${yc + 4}" text-anchor="end">${esc(r.label)}</text>`;
+      const w = Math.max(x(r.value ?? 0) - labelW, 0);
+      if (w > 0) { const rr = Math.min(4, w); s += `<path class="mark" fill="${r.color || "var(--s1)"}" d="M${labelW},${yc - bh / 2} H${labelW + w - rr} q${rr},0 ${rr},${rr} V${yc + bh / 2 - rr} q0,${rr} -${rr},${rr} H${labelW} Z"/>`; }
+      if (r.lo !== undefined && r.lo !== null && r.hi !== null) s += `<line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${yc}" y2="${yc}" stroke="var(--ink-2)" stroke-width="1.5"/><line x1="${x(r.lo)}" x2="${x(r.lo)}" y1="${yc - 4}" y2="${yc + 4}" stroke="var(--ink-2)" stroke-width="1.5"/><line x1="${x(r.hi)}" x2="${x(r.hi)}" y1="${yc - 4}" y2="${yc + 4}" stroke="var(--ink-2)" stroke-width="1.5"/>`;
+      if (r.prior !== undefined && r.prior !== null) s += `<line x1="${x(r.prior)}" x2="${x(r.prior)}" y1="${yc - 9}" y2="${yc + 9}" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/>`;
+      s += `<text class="val" x="${Math.max(x(r.value ?? 0), x(r.hi ?? 0)) + 6}" y="${yc + 4}">${valFmt(r.value)}${r.note ? ` <tspan class="muted" style="fill:var(--muted);font-weight:400">${esc(r.note)}</tspan>` : ""}</text>`;
+      const tipTxt = r.tip || `<b>${esc(r.label)}</b><br>${valFmt(r.value)}${r.prior !== undefined && r.prior !== null ? `<br>${priorName}: ${valFmt(r.prior)}` : ""}${r.lo !== undefined && r.lo !== null ? `<br>90% interval: ${valFmt(r.lo)}–${valFmt(r.hi)}` : ""}`;
+      s += `<rect class="hit" x="0" y="${yc - rowH / 2}" width="${W}" height="${rowH}" data-tip="${esc(tipTxt)}"/>`;
+    });
+    s += `<line class="baseline" x1="${labelW}" x2="${labelW}" y1="0" y2="${h}"/>`;
+    return s + "</svg>";
+  }
+
+  function histogram(values, edges, labels, { color = "var(--s1)", extra = null, rowH = 26, W = 640 } = {}) {
+    const counts = labels.map(() => 0);
+    values.forEach((v) => { for (let i = 0; i < edges.length - 1; i++) if (v >= edges[i] && v < edges[i + 1]) { counts[i]++; break; } });
+    const rows = labels.map((l, i) => ({ label: l, value: counts[i], color }));
+    if (extra) rows.push(extra);
+    return hbars(rows, { labelW: 110, rowH, W });
+  }
+
+  // ---------- slides (each is a fixed 1280x720 canvas; content is sized to fit)
+  const slides = [];
+  const ns = (id) => (N.slides && N.slides[id]) || {};
+  const T = (id, fallback) => ns(id).title || fallback;
+  /** section: metro line name; station: short label on the map */
+  const S = (id, { kicker, title, sowhat = "", metrics = [], section, station, cls = "" }, body) =>
+    slides.push({ id, section, station, cls, kicker, title, sowhat, metrics, body });
+  const tiles = (keys) => `<div class="tiles">${keys.filter((k) => K[k]).map((k) => tile(k)).join("")}</div>`;
+  const famNames = { flow: "Community & flow", adoption: "Adoption & reach", code: "Codebase & quality", themes: "Issue themes" };
+  const kpiTable = (keys) => `<table class="kpis"><thead><tr><th>Indicator</th><th class="num">Now</th><th class="num">Prior</th><th class="num">Change</th><th></th></tr></thead><tbody>${
+    keys.filter((k) => K[k]).map((k) => { const m = K[k];
+      return `<tr title="${esc(m.note)}"><td>${esc(m.label)}</td><td class="num"><b>${fmt(m.value, m.unit)}</b></td><td class="num muted">${m.prior !== null && m.prior !== undefined ? fmt(m.prior, m.unit) : ""}</td><td class="num">${deltaHtml(m)}</td><td>${chip(m.status)}</td></tr>`; }).join("")}</tbody></table>`;
+  const plan = (N.recommendations || []).slice().sort((a, b) => (a.priority || 99) - (b.priority || 99));
+
+  // 1 title
+  S("title", { cls: "title-slide" },
+    `<div class="title-wrap"><div class="kicker">${esc(M.repo)} · project pulse · edition ${esc(M.as_of)}</div>
+     <h1 class="hero">${esc(N.headline || "Project health: last " + M.window_days + " days vs the " + M.window_days + " before")}</h1>
+     <div class="title-strip">${(D.headline_kpis || []).filter((k) => K[k]).map((k) => `<div><b>${fmt(K[k].value, K[k].unit)}</b><span>${esc(K[k].label)}</span>${deltaHtml(K[k])}</div>`).join("")}</div>
+     <p class="title-meta">Current window ${esc(M.windows.cur[0])} → ${esc(M.windows.cur[1])} vs prior ${esc(M.windows.prior[0])} → ${esc(M.windows.prior[1])}.
+     Numbers are computed from ${["GitHub", "git", K.pypi_downloads ? "PyPI" : "", K.hf_spaces_new ? "the HF Hub" : ""].filter(Boolean).join(", ")}; every narrative claim is checked against them.</p>
+     ${D.note ? `<p class="title-meta"><b>${esc(D.note)}</b></p>` : ""}
+     <p class="title-meta muted">Press → to start · O for overview · narrative: ${esc(N.source || "none")}</p></div>`);
+
+  // 2 executive summary
+  S("summary", { kicker: "Executive summary", title: N.summary_title || "What maintainers need to know", section: "Overview", station: "Summary" },
+    `${tiles(D.headline_kpis || [])}
+     <div class="cols2 grow"><div class="card"><h3>Key findings</h3>${(N.findings || []).slice(0, 3).map((f) =>
+      `<div class="finding"><span class="sev ${esc(f.severity || "medium")}">${esc(f.severity || "")}</span><div>${esc(f.text)}${cite(f.metrics)}</div></div>`).join("") || '<p class="muted">No findings.</p>'}</div>
+     <div class="card"><h3>Improvement plan: top priorities</h3>${plan.slice(0, 3).map((r) =>
+      `<div class="finding"><span class="prio">P${r.priority || ""}</span><div><b>${esc(r.text)}</b><div class="small muted">${esc(r.outcome || r.why || "")}</div><div class="small muted">${esc(r.horizon || "")} · effort ${esc(r.effort || "?")} · ${esc(r.owner || "")}</div></div></div>`).join("")}</div></div>`);
+
+  // 3-5 scorecards
+  const SC = Array.isArray(D.scorecard) ? D.scorecard : Object.entries(M.families).map(([id, ks]) => ({ id, title: famNames[id] || id, tables: { [famNames[id] || id]: ks } }));
+  const moveOf = (m) => {
+    if (m.prior === null || m.prior === undefined || typeof m.value !== "number" || m.direction === "neutral" || m.value === m.prior) return "flat";
+    return (m.direction === "down" ? m.value < m.prior : m.value > m.prior) ? "up" : "down";
+  };
+  const scShort = { flow: "Flow", adoption: "Reach", code: "Code" };
+  SC.forEach((sc, i) => {
+    const keys = Object.values(sc.tables).flat().filter((k) => K[k]);
+    if (!keys.length) return;
+    const better = keys.filter((k) => moveOf(K[k]) === "up").length, worse = keys.filter((k) => moveOf(K[k]) === "down").length;
+    const risk = keys.filter((k) => K[k].status === "red").length, watch = keys.filter((k) => K[k].status === "amber").length;
+    const nut = (N.nutshells || {})[sc.id] || {};
+    const counters = `<div class="counters"><span class="delta good">▲ ${better} improving</span><span class="delta bad">▼ ${worse} worsening</span>${risk ? `<span class="chip red"><i></i>${risk} at risk</span>` : ""}${watch ? `<span class="chip amber"><i></i>${watch} to watch</span>` : ""}<span class="muted small">${keys.length} indicators</span></div>`;
+    S(`scorecard-${sc.id}`, { kicker: `Scorecard ${i + 1}/${SC.length}`, title: sc.title, section: "Scorecard", station: scShort[sc.id] || sc.title },
+      `<div class="card nutshell"><div class="kicker">In a nutshell</div><p class="nut">${esc(nut.text || "")}</p>${cite(nut.metrics)}${counters}</div>
+       <div class="cols2">${Object.entries(sc.tables).map(([t, ks]) => `<div class="card"><h3>${esc(t)}</h3>${kpiTable(ks)}</div>`).join("")}</div>`);
+  });
+
+  // 6 flow
+  const issueSeries = [{ name: "opened", color: "var(--s2)", points: C.issue_flow.opened }, { name: "closed", color: "var(--s1)", points: C.issue_flow.closed }];
+  const prSeries = [{ name: "opened", color: "var(--s2)", points: C.pr_flow.opened }, { name: "merged", color: "var(--s1)", points: C.pr_flow.merged }];
+  S("flow", { kicker: "Deep dive · community & flow", title: T("flow", "Issue and PR flow"), sowhat: ns("flow").so_what, metrics: ns("flow").metrics, section: "Deep dives", station: "Flow" },
+    `${tiles(["issues_opened", "issues_closed", "issue_backlog_net", "open_issues_over_90d", "prs_merged"])}
+     <div class="cols3 grow"><div class="card"><h3>Issues per week</h3>${legend([["opened", "var(--s2)"], ["closed", "var(--s1)"]])}${lineChart(issueSeries, { W: 420, h: 300 })}</div>
+     <div class="card"><h3>Pull requests per week (humans)</h3>${legend([["opened", "var(--s2)"], ["merged", "var(--s1)"]])}${lineChart(prSeries, { W: 420, h: 300 })}</div>
+     <div class="card"><h3>Open issues by age (${K.open_issues.value} open)</h3>${hbars(Object.entries(C.backlog_age).map(([k, v]) => ({ label: k, value: v, color: k === ">90d" ? "var(--s2)" : "var(--s1)" })), { labelW: 70, W: 420, rowH: 46 })}
+       <p class="small muted">Complete weeks only; shaded = current window.</p></div></div>`);
+
+  // 7 responsiveness
+  const unans = K.unanswered_open_issues.value;
+  S("responsiveness", { kicker: "Deep dive · community & flow", title: T("responsiveness", "How fast maintainers respond and merge"), sowhat: ns("responsiveness").so_what, metrics: ns("responsiveness").metrics, section: "Deep dives", station: "Response" },
+    `${tiles(["response_within_7d", "median_first_response_days", "median_pr_first_response_days", "median_time_to_merge_external_days"])}
+     <div class="cols3 grow"><div class="card"><h3>First maintainer reply, community issues this window</h3>
+       ${histogram(C.resp_dist, [0, 1, 3, 7, 30, 1e9], ["< 1 day", "1–3 days", "3–7 days", "7–30 days", "> 30 days"], { rowH: 40, W: 420, extra: { label: "no reply yet", value: unans, color: "var(--s2)", tip: `<b>${unans} open issues</b> have no maintainer reply at all` } })}</div>
+     <div class="card"><h3>Time to merge, PRs merged this window</h3>${histogram(C.ttm_dist, [0, 1 / 24, 1, 3, 7, 1e9], ["< 1 hour", "1 h – 1 day", "1–3 days", "3–7 days", "> 7 days"], { rowH: 46, W: 420 })}</div>
+     <div class="card"><h3>Latest issues with no maintainer reply</h3><table class="compact"><tbody>${(X.flow.unanswered_open_issues || []).slice(0, 6).map(([n, t]) => `<tr><td class="num">#${n}</td><td class="clamp">${esc(t)}</td></tr>`).join("")}</tbody></table></div></div>`);
+
+  // 8 contributors
+  const maint = new Set(X.flow.maintainers);
+  S("contributors", { kicker: "Deep dive · community & flow", title: T("contributors", "Who is contributing"), sowhat: ns("contributors").so_what, metrics: ns("contributors").metrics, section: "Deep dives", station: "People" },
+    `${tiles(["pr_contributors", "new_contributors", "external_pr_share", "top_merger_share", "bus_factor"])}
+     <div class="cols3 grow"><div class="card span2"><h3>PRs opened this window, by author</h3>${legend([["maintainer", "var(--s1)"], ["outside contributor", "var(--s3)"]])}
+       ${hbars(C.pr_authors.slice(0, 9).map(([a, n]) => ({ label: a, value: n, color: maint.has(a) ? "var(--s1)" : "var(--s3)" })), { labelW: 150, rowH: 30, W: 780 })}</div>
+     <div class="card"><h3>Who merges</h3>${hbars((C.mergers || []).map(([a, n]) => ({ label: a || "?", value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420, empty: "No PRs merged in this window." })}
+       <h3 style="margin-top:10px">Commits, by author</h3>${hbars((C.commit_authors || []).slice(0, 5).map(([a, n]) => ({ label: a, value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420 })}</div></div>`);
+
+  // 9 adoption
+  const pct = (arr) => { const t = arr.reduce((a, [, v]) => a + v, 0) || 1; return arr.slice(0, 4).map(([k, v]) => `${esc(k)} ${Math.round((v / t) * 100)}%`).join(" · "); };
+  S("adoption", { kicker: "Deep dive · adoption & reach", title: T("adoption", "Adoption"), sowhat: ns("adoption").so_what, metrics: ns("adoption").metrics, section: "Deep dives", station: "Adoption" },
+    `${tiles(["stars_new", "forks_new", "forks_active", "pypi_downloads", "days_since_release"])}
+     <div class="cols3 grow"><div class="card"><h3>New stars per week ${/approx/.test(K.stars_new?.note || "") ? '<span class="pill">approx.</span>' : ""}</h3>${C.stars_weekly ? weeklyBars(C.stars_weekly, { name: "new stars", W: 420, h: 290 }) : '<p class="muted">no star history</p>'}
+       <p class="small muted">${esc(K.stars_new?.note || "From the GitHub stargazers API.")}</p></div>
+     ${C.pypi_weekly ? `<div class="card"><h3>PyPI downloads per week</h3>${weeklyBars(C.pypi_weekly.filter((p) => p[0] >= M.windows.prior[0]), { name: "downloads", W: 420, h: 290 })}
+       <p class="small muted">${esc(K.pypi_downloads?.note || "No mirrors.")}</p></div>` : `<div class="card"><h3>New forks per week</h3>${weeklyBars(C.forks_weekly, { name: "new forks", W: 420, h: 290 })}</div>`}
+     <div class="card">${(C.pypi_system || []).length ? `<h3>Who downloads (this window)</h3><p class="small"><b>OS</b><br>${pct(C.pypi_system)}</p><p class="small"><b>Python</b><br>${pct(C.pypi_python_minor || [])}</p>` : ""}
+       <h3>Releases</h3><p class="small">${(X.adoption.releases || []).slice(0, 4).map(([t, d]) => `${esc(t)} <span class="muted">${esc(d)}</span>`).join("<br>")}</p></div></div>`);
+
+  // 10 code
+  const tested = X.code.module_tested || {}, owner = X.code.module_top_author_share || {};
+  const churnRows = (C.module_churn || []).filter((r) => !["other"].includes(r[0])).slice(0, 10).map(([m, cur, prior, commits]) => ({
+    label: m, value: cur, prior, color: "var(--s1)",
+    note: `${commits} commits${owner[m] > 0.8 && commits >= 3 ? " · single-owner" : ""}${m in tested && !tested[m] ? " · no tests" : ""}`,
+    tip: `<b>${esc(m)}</b><br>lines changed: ${fmt(cur)} (prior ${fmt(prior)})<br>commits: ${commits}<br>top author share: ${owner[m] !== undefined ? Math.round(owner[m] * 100) + "%" : "—"}${m in tested ? `<br>matching tests: ${tested[m] ? "yes" : "no"}` : ""}` }));
+  S("code", { kicker: "Deep dive · codebase", title: T("code", "Where the code is changing"), sowhat: ns("code").so_what, metrics: ns("code").metrics, section: "Deep dives", station: "Code" },
+    `${tiles(["commits", "commit_authors", "top_committer_share", "modules_single_owner", "test_loc_ratio"])}
+     <div class="cols2 grow"><div class="card"><h3>Lines changed per module (bar = now, tick = prior)</h3>${hbars(churnRows, { labelW: 80, rowH: 33, W: 600, empty: "No commits landed in this window." })}</div>
+     <div class="card"><h3>Hottest files this window</h3>${(C.hotspot_files || []).length ? "" : EMPTY("No files changed in this window.")}<table class="compact"><tbody>${(C.hotspot_files || []).slice(0, 11).map(([f, n]) => `<tr><td class="clamp mono">${esc(f)}</td><td class="num">${fmt(n)}</td></tr>`).join("")}</tbody></table></div></div>`);
+
+  // 11 quality
+  const deps = X.code.dependencies || [];
+  const untested = Object.entries(X.code.backends || {}).filter(([, t]) => !t).map(([b]) => b);
+  S("quality", { kicker: "Deep dive · quality & risk", title: T("quality", "CI, tests and dependency risk"), sowhat: ns("quality").so_what, metrics: ns("quality").metrics, section: "Deep dives", station: "Quality" },
+    `${tiles(["ci_pass_rate_main", "ci_pass_rate_pr", "ci_median_minutes", "backends_with_tests", "critical_deps_behind"])}
+     <div class="cols2 grow"><div class="card"><h3>Weekly CI pass rate (all CI runs)</h3>${(C.ci_weekly || []).length ? lineChart([{ name: "pass rate", color: "var(--s1)", points: C.ci_weekly.map(([d, r]) => [d, r]) }], { yFmt: (v) => Math.round(v * 100) + "%", yMax: 1, W: 600, h: 290 }) : EMPTY("No CI runs on record for this workflow.")}
+       ${Object.keys(X.code.backends || {}).length ? `<p class="small muted">Backends without a matching test file: ${untested.map(esc).join(", ") || "none"} (file-name match, not line coverage).</p>` : ""}</div>
+     <div class="card"><h3>Critical dependencies</h3><table class="compact"><thead><tr><th>Package</th><th>Pinned</th><th>Latest</th><th></th></tr></thead><tbody>${deps.map((d) =>
+       `<tr><td>${esc(d.dep)}</td><td>${esc(d.pinned || (d.spec.startsWith("(") ? "—" : "range"))}</td><td>${esc(d.latest || "?")}</td><td>${d.behind ? '<span class="chip amber"><i></i>behind</span>' : ""}${d.unbounded ? ' <span class="chip red"><i></i>no upper bound</span>' : ""}</td></tr>`).join("")}</tbody></table>
+       ${(X.code.known_incidents || []).map((i) => `<p class="small muted">Incident ${esc(i.date)}: ${esc(i.title)} (${(i.refs || []).map(esc).join(", ")})</p>`).join("")}</div></div>`);
+
+  // 12 themes
+  const th = X.themes || {};
+  if (th.available) {
+    const tc = C.theme_counts, ty = C.type_counts;
+    const themeRows = tc.classes.filter((c) => tc.cur[c][0] > 0 || (tc.prior[c] || 0) > 0).sort((a, b) => tc.cur[b][0] - tc.cur[a][0]).map((c) => ({
+      label: c, value: tc.cur[c][0], lo: tc.cur[c][1], hi: tc.cur[c][2], prior: tc.prior[c] || 0, color: c === "unclassified" ? "var(--axis)" : "var(--s1)" }));
+    const typeRows = ty.classes.filter((c) => ty.cur[c][0] > 0).map((c) => ({ label: c, value: ty.cur[c][0], prior: ty.prior[c] || 0, color: c === "bug" ? "var(--s2)" : "var(--s1)" }));
+    const pm = (th.pain_map || []).filter((r) => r.cur || r.open);
+    const prov = Object.entries(th.provenance || {}).map(([k, v]) => `${v} ${k}`).join(", ");
+    const gateMsg = !th.themes_ok ? `<div class="warnbox">Theme counts hidden: the issue classifier did not pass the accuracy gate (${esc((B.themes || {}).reason || "")}).</div>` :
+      (!th.gold_reviewed ? `<div class="warnbox">Provisional: labels come from a one-time LLM pre-label pass (${esc(prov)}) not yet reviewed by a maintainer.</div>` : "");
+    S("themes", { kicker: "Deep dive · issue themes", title: T("themes", "Where users are hurting"), sowhat: ns("themes").so_what, metrics: ns("themes").metrics, section: "Deep dives", station: "Themes" },
+      `${gateMsg}${th.themes_ok ? `<div class="cols3 grow"><div class="card"><h3>New issues by theme (bar = now, tick = prior)</h3>${hbars(themeRows, { labelW: 110, rowH: 27, W: 420 })}</div>
+       <div class="card span2"><h3>Pain map</h3><table class="compact"><thead><tr><th>Theme</th><th class="num">New</th><th class="num">Open</th><th class="num" title="issues closed this window; includes old issues swept in triage">Age at close</th><th>Open examples</th></tr></thead><tbody>${
+         pm.slice(0, 6).map((r) => `<tr><td>${esc(r.theme)}</td><td class="num">${r.cur}</td><td class="num">${r.open}</td><td class="num">${r.median_days_to_close === null ? "—" : fmt(r.median_days_to_close, "days")}</td><td class="clamp">${r.examples.slice(0, 1).map(([n, t]) => `<span title="${esc(t)}">#${n} ${esc(t)}</span>`).join("")}</td></tr>`).join("")}</tbody></table>
+         <h3 style="margin-top:10px">Issue type</h3>${hbars(typeRows, { labelW: 110, rowH: 22, W: 780 })}</div></div>` : ""}`);
+  }
+
+  // 13 improvement plan: overview, then one slide per priority
+  const lanes = ["2 weeks", "this quarter", "next quarter"].filter((h) => plan.some((r) => (r.horizon || "this quarter") === h));
+  S("recs", { kicker: "Improvement plan proposal", title: N.recs_title || "Improvement plan proposal",
+    sowhat: "Ranked by impact on project health and urgency. One slide per priority follows.", section: "Plan", station: "All" },
+    `<div class="card roadmap">${lanes.map((h) => `<div class="lane"><div class="kicker">${esc(h)}</div>${plan.filter((r) => (r.horizon || "this quarter") === h).map((r) =>
+        `<button class="lane-item" data-goto="p${r.priority}"><span class="prio">P${r.priority}</span>${esc(r.text)}</button>`).join("")}</div>`).join("")}</div>
+     <div class="card grow"><table class="plan-table"><thead><tr><th></th><th>Action</th><th>Issue</th><th>Outcome</th><th>When · effort · owner</th></tr></thead><tbody>${
+       plan.map((r) => `<tr><td><span class="prio">P${r.priority}</span></td><td><b>${esc(r.text)}</b></td><td><div class="clamp3">${esc(r.issue || r.why || "")}</div></td><td><div class="clamp3">${esc(r.outcome || "")}</div></td><td class="small">${esc(r.horizon || "")} · ${esc(r.effort || "?")}<br><span class="muted">${esc(r.owner || "")}</span></td></tr>`).join("")
+     }</tbody></table></div>`);
+  plan.forEach((r) => {
+    const now = (r.metrics || []).filter((k) => K[k]).slice(0, 3).map((k) => `<div class="measure"><span class="small muted">${esc(K[k].label)}</span><b>${fmt(K[k].value, K[k].unit)}</b>${deltaHtml(K[k])}</div>`).join("");
+    S(`p${r.priority}`, { kicker: `Improvement plan · priority ${r.priority} of ${plan.length}`, title: r.text, section: "Plan", station: `P${r.priority}` },
+      `<div class="plan-slide grow"><div class="plan-main">
+         <div class="plan-meta"><span class="prio big">P${r.priority}</span><span class="pill">${esc(r.horizon || "")}</span><span class="pill">effort ${esc(r.effort || "?")}</span><span class="small muted">owner: ${esc(r.owner || "")}</span></div>
+         <div class="io"><div class="issue"><div class="kicker">Issue</div><p>${esc(r.issue || r.why || "")}</p>${cite(r.metrics)}</div>
+           <div class="outcome"><div class="kicker">Outcome</div><p>${esc(r.outcome || "")}</p></div></div>
+         ${(r.actions || []).length ? `<div class="card"><div class="kicker">First actions</div><ol class="actions">${r.actions.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></div>` : ""}</div>
+       <aside class="plan-measure card"><div class="kicker">Now</div>${now}<div class="kicker" style="margin-top:12px">Target next edition</div><div class="target">${esc(r.target || "")}</div></aside></div>`);
+  });
+
+  // appendix
+  const tb = D.token_report || {};
+  const bk = B.types ? `<p>Type: <b>${esc(B.types.model)}</b> — macro-F1 ${B.types.macro_f1}, ECE ${B.types.ece}, coverage ${Math.round((B.types.coverage || 0) * 100)}% at ${Math.round((D.target_precision || .85) * 100)}% precision — gate ${B.types.passed ? "passed" : "not passed"}.</p>
+    <p>Theme: <b>${esc(B.themes.model)}</b> — macro-F1 ${B.themes.macro_f1}, ECE ${B.themes.ece}, coverage ${Math.round((B.themes.coverage || 0) * 100)}% — gate ${B.themes.passed ? "passed" : "not passed"} (${esc(B.themes.reason)}).</p>
+    <p class="muted">Mode: <b>${esc(B.mode || "local")}</b> (local = free models only; auto = best measured incl. API; jev = forced). Rule: ${esc(B.rule || "")}. Gold set reviewed: ${B.gold_reviewed ? "yes" : "no"}. Full comparison in out/${esc(M.title || "")}-bakeoff.html.</p>` : '<p class="muted">No classifier bake-off on record.</p>';
+  S("appendix", { kicker: "Appendix", title: "Methodology, sources and caveats", section: "Appendix", station: "Method" },
+    `<div class="cols2 grow small"><div class="card"><h3>Method</h3>
+      <p>Current window = last ${M.window_days} days to ${esc(M.as_of)}; prior = the ${M.window_days} days before. Bots excluded; maintainers = people who merged a PR in the last year.
+      Response times count the first comment or review by a maintainer on items opened by someone else.</p>
+      <h3>Sources</h3><p>GitHub via <code>gh</code> (issues, PRs, reviews, stars, forks, releases, Actions runs of <code>${esc(X.code.ci_workflow || "CI")}</code>); git clone at <code>${esc(X.code.head || "")}</code>${K.pypi_downloads ? "; pypistats.org" : ""}${K.hf_spaces_new ? "; Hugging Face Hub search" : ""}.</p>
+      <h3>Caveats</h3><p>${["stars_new", "pypi_downloads", "hf_spaces_new", "dependents", "backends_with_tests"].filter((k) => K[k]).map((k) => `<b>${esc(K[k].label)}</b>: ${esc(K[k].note || "—")}`).join("<br>")}</p></div>
+     <div class="card"><h3>Issue classifier</h3>${bk}
+      <h3>Narrative</h3><p>${esc(N.source || "none")}. ${(N.dropped || []).length} claims removed by the number check.</p>
+      <h3>Token report</h3><p>${esc(tb.summary || "—")}</p></div></div>`);
+  S("all-1", { kicker: "Appendix", title: "All indicators · community & flow", section: "Appendix", station: "KPIs 1" },
+    `<div class="cols2 grow">${[0, 1].map((h) => { const ks = M.families.flow; const mid = Math.ceil(ks.length / 2); return `<div class="card">${kpiTable(h ? ks.slice(mid) : ks.slice(0, mid))}</div>`; }).join("")}</div>`);
+  S("all-2", { kicker: "Appendix", title: "All indicators · adoption, codebase, themes", section: "Appendix", station: "KPIs 2" },
+    `<div class="cols2 grow"><div class="card"><h3>${famNames.adoption}</h3>${kpiTable(M.families.adoption)}<h3 style="margin-top:8px">${famNames.themes}</h3>${kpiTable(M.families.themes || [])}</div>
+     <div class="card"><h3>${famNames.code}</h3>${kpiTable(M.families.code)}</div></div>`);
+
+  // ---------- render: metro band, frame, footer
+  const LINES = [
+    { name: "Overview", color: "var(--ink-2)" }, { name: "Scorecard", color: "var(--s1)" }, { name: "Deep dives", color: "var(--s3)" },
+    { name: "Plan", color: "var(--s2)" }, { name: "Appendix", color: "var(--muted)" },
+  ].filter((l) => slides.some((s) => s.section === l.name));
+  const metro = (cur) => `<nav class="metro" aria-label="Presentation map">${LINES.map((l) => {
+    const st = slides.map((s, i) => ({ s, i })).filter(({ s }) => s.section === l.name);
+    const active = st.some(({ i }) => i === cur);
+    return `<div class="metro-line${active ? " active" : ""}" style="--c:${l.color};--n:${Math.max(2, st.length)}"><div class="metro-name">${esc(l.name)}</div><div class="metro-stops">${
+      st.map(({ s, i }) => `<button class="stop${i === cur ? " here" : i < cur ? " past" : ""}" data-goto="${s.id}" title="${esc(s.station)}"${i === cur ? ' aria-current="step"' : ""}><i></i><span>${esc(s.station)}</span></button>`).join("")
+    }</div></div>`; }).join("")}</nav>`;
+  const total = slides.length;
+  deck.innerHTML = slides.map((s, i) => `<section class="slide ${s.cls}" id="s-${s.id}" data-i="${i}" aria-roledescription="slide" aria-label="${i + 1} of ${total}">
+    ${s.section ? metro(i) : ""}
+    ${s.title ? `<header class="slide-head"><div class="kicker">${esc(s.kicker || "")}</div><h2>${esc(s.title)}</h2>${s.sowhat ? `<p class="sowhat">${esc(s.sowhat)}</p>` : ""}${cite(s.metrics)}</header>` : ""}
+    <div class="slide-body">${s.body}</div>
+    <footer class="slide-foot"><span>${esc(M.repo)} · pulse · ${esc(M.as_of)}</span><span>${i + 1} / ${total}</span></footer></section>`).join("");
+
+  // ---------- engine: one slide at a time, scaled 1280x720 canvas; scroll mode on narrow screens
+  const secs = [...deck.querySelectorAll(".slide")];
+  const pos = document.getElementById("pos");
+  const root = document.documentElement;
+  let cur = 0;
+  const idx = (id) => slides.findIndex((s) => s.id === id);
+  const narrow = () => matchMedia("(max-width: 760px)").matches;
+  function fit() {
+    const s = Math.min(window.innerWidth / 1280, (window.innerHeight - 0) / 720);
+    root.style.setProperty("--scale", s.toFixed(4));
+  }
+  function show(i, push = true) {
+    cur = Math.max(0, Math.min(total - 1, i));
+    secs.forEach((el, j) => { el.classList.toggle("active", j === cur); el.classList.toggle("before", j < cur); });
+    pos.textContent = `${cur + 1} / ${total}`;
+    if (narrow()) secs[cur].scrollIntoView({ block: "start" });
+    if (push) history.replaceState(null, "", `#${cur + 1}`);
+  }
+  const go = (i) => show(i);
+  document.getElementById("prev").onclick = () => go(cur - 1);
+  document.getElementById("next").onclick = () => go(cur + 1);
+  deck.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-goto]");
+    if (t) { e.preventDefault(); const i = idx(t.dataset.goto); if (i >= 0) { if (body.classList.contains("overview")) toggleOverview(false); go(i); } }
+  });
+  const body = document.body;
+  function toggleOverview(on = !body.classList.contains("overview")) {
+    body.classList.toggle("overview", on);
+    if (on) secs[cur].scrollIntoView({ block: "center" });
+  }
+  deck.addEventListener("click", (e) => {
+    if (!body.classList.contains("overview")) return;
+    const sl = e.target.closest(".slide");
+    if (sl) { toggleOverview(false); go(+sl.dataset.i); }
+  });
+  document.getElementById("ovBtn").onclick = () => toggleOverview();
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === "Home") go(0); else if (e.key === "End") go(total - 1);
+    else if (e.key === "o" || e.key === "O" || (e.key === "Escape" && body.classList.contains("overview"))) toggleOverview();
+  });
+  let tx = null;
+  deck.addEventListener("touchstart", (e) => { tx = e.touches[0].clientX; }, { passive: true });
+  deck.addEventListener("touchend", (e) => { if (tx === null || narrow()) return; const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 50) go(cur + (dx < 0 ? 1 : -1)); tx = null; });
+  // narrow screens scroll; keep the counter in sync
+  deck.addEventListener("scroll", () => { if (!narrow()) return; const y = deck.scrollTop + 40; let i = 0; secs.forEach((s, j) => { if (s.offsetTop <= y) i = j; }); if (i !== cur) { cur = i; pos.textContent = `${cur + 1} / ${total}`; } }, { passive: true });
+  window.addEventListener("resize", fit);
+  fit();
+  const start = parseInt((location.hash || "").slice(1), 10);
+  show(Number.isFinite(start) ? start - 1 : 0, false);
+  // overflow guard: content must fit the 1280x720 canvas
+  if (!narrow()) secs.forEach((el) => {
+    const was = el.classList.contains("active"); el.classList.add("active");
+    const b = el.querySelector(".slide-body");
+    if (b && b.scrollHeight > b.clientHeight + 2) console.warn(`[repo-pulse] overflow on slide ${el.id}: body +${b.scrollHeight - b.clientHeight}px`);
+    el.querySelectorAll(".card").forEach((c, k) => { if (c.scrollHeight > c.clientHeight + 2) console.warn(`[repo-pulse] overflow on slide ${el.id}: card ${k} +${c.scrollHeight - c.clientHeight}px`); });
+    if (!was) el.classList.remove("active");
+  });
+
+  let saved = null; try { saved = localStorage.getItem("repo-pulse-theme"); } catch (e) {}
+  if (saved) root.setAttribute("data-theme", saved);
+  document.getElementById("themeBtn").onclick = () => {
+    const dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = dark ? "light" : "dark"; root.setAttribute("data-theme", next);
+    try { localStorage.setItem("repo-pulse-theme", next); } catch (e) {}
+  };
+})();
+</script>
+</body>
+</html>

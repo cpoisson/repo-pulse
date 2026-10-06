@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+data/raw/
+data/cache/
+out/
+!out/.gitkeep
+
+# keep edition outputs local; commit only small decision artifacts
+data/*/label_cache.json
+checkpoints/
+.lavish/
+logs/
+out/*-shots/
+data/*/digest-*.txt
+media/video/node_modules/
+media/video/out/
+media/video/public/music.wav
+
+# analysed repos are local: configs and their data (gold labels, bake-offs, metrics, history) stay out of this repo
+configs/*.yaml
+!configs/_template.yaml
+data/

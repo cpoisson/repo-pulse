@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>speech-to-speech pulse · 2026-10-06</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #e9e8e3; --slide: #fbfaf7; --surface: #f3f2ee; --card: #ffffff;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --band: rgba(42,120,214,0.07);
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b; --good-text: #006300; --crit-text: #b22a2a;
+  --accent: #2a78d6; --scale: 1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #050505; --slide: #161615; --surface: #1d1d1c; --card: #1f1f1e;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --band: rgba(57,135,229,0.12);
+    --good-text: #0ca30c; --crit-text: #e66767; --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #050505; --slide: #161615; --surface: #1d1d1c; --card: #1f1f1e;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --band: rgba(57,135,229,0.12);
+  --good-text: #0ca30c; --crit-text: #e66767; --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--page); color: var(--ink); }
+body { font: 15px/1.42 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+
+/* ---------- stage: fixed 1280x720 canvas scaled to the viewport, one slide visible */
+#deck { position: fixed; inset: 0; }
+.slide { position: absolute; left: 50%; top: 50%; width: 1280px; height: 720px; margin: -360px 0 0 -640px;
+  transform: scale(var(--scale)); transform-origin: center; background: var(--slide);
+  box-shadow: 0 10px 40px rgba(0,0,0,.18); border-radius: 6px; overflow: hidden;
+  display: flex; flex-direction: column; padding: 0 56px; opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s; }
+.slide.active { opacity: 1; visibility: visible; }
+.slide-head { padding-top: 14px; display: flex; flex-direction: column; gap: 2px; }
+.slide:not(:has(.metro)) .slide-head { padding-top: 40px; }
+.slide-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px 0 6px; }
+.slide-foot { height: 34px; flex: none; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--muted);
+  border-top: 1px solid var(--grid); letter-spacing: .02em; }
+.kicker { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { margin: 0; }
+h2 { font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; }
+h3 { font-size: 13px; color: var(--ink-2); font-weight: 650; margin-bottom: 6px; }
+.sowhat { color: var(--ink-2); margin: 4px 0 0; font-size: 15px; max-width: 1080px; }
+.cite { font-size: 10px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 2px; }
+
+/* ---------- layout primitives */
+.grow { flex: 1; min-height: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; }
+.cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.span2 { grid-column: span 2; }
+.card { background: var(--card); border: 1px solid var(--ring); border-radius: 10px; padding: 12px 14px; min-width: 0; min-height: 0; overflow: hidden; }
+.tile { padding: 10px 14px; }
+.tile .lbl { color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .val { font-size: 28px; font-weight: 680; letter-spacing: -0.01em; margin: 2px 0; line-height: 1.1; }
+.tile .sub { font-size: 11px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.info { color: var(--muted); font-size: 11px; }
+.delta { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.delta.good { color: var(--good-text); } .delta.bad { color: var(--crit-text); } .delta.flat { color: var(--ink-2); }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; padding: 0 7px 0 5px; border-radius: 99px;
+  border: 1px solid var(--ring); color: var(--ink-2); white-space: nowrap; line-height: 18px; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.chip.green i { background: var(--good); } .chip.amber i { background: var(--warn); } .chip.red i { background: var(--crit); }
+.finding { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--grid); font-size: 15.5px; line-height: 1.45; }
+.grow > .card { display: flex; flex-direction: column; } .grow > .card > svg.chart { margin-top: auto; margin-bottom: auto; }
+.finding:first-of-type { border-top: 0; }
+.sev { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--ring); white-space: nowrap; }
+.sev.high { color: var(--crit-text); } .sev.medium { color: var(--ink-2); } .sev.low { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 11px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.compact td, table.compact th { padding: 4px 6px; }
+table.kpis td, table.kpis th { padding: 4px 6px; }
+.clamp { max-width: 0; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clamp3 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--ink-2); margin-bottom: 4px; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; } svg .baseline { stroke: var(--axis); stroke-width: 1; }
+svg text { fill: var(--muted); font-size: 11px; font-family: inherit; } svg text.lab { fill: var(--ink-2); } svg text.val { fill: var(--ink); font-weight: 600; }
+svg .band { fill: var(--band); } svg .hit { fill: transparent; } svg .mark:hover { filter: brightness(1.12); }
+.muted { color: var(--muted); } .small { font-size: 12px; } p { margin: 0 0 6px; }
+.pill { font-size: 11px; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--ring); color: var(--ink-2); white-space: nowrap; }
+.empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 15px; min-height: 120px;
+  border: 1px dashed var(--grid); border-radius: 8px; margin-top: 6px; }
+.warnbox { border-left: 3px solid var(--warn); padding: 6px 12px; background: var(--card); border-radius: 6px; font-size: 12.5px; color: var(--ink-2); }
+a { color: var(--accent); }
+code { font-size: 12px; }
+
+/* ---------- title slide */
+.title-slide { background: radial-gradient(1200px 600px at 85% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%), var(--slide); }
+.title-slide .slide-body { justify-content: center; padding: 0; }
+.title-wrap { display: flex; flex-direction: column; gap: 22px; }
+.hero { font-size: 56px; line-height: 1.04; letter-spacing: -0.02em; max-width: 1080px; }
+.title-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); }
+.title-strip > div { padding: 12px 14px 0 0; display: flex; flex-direction: column; gap: 2px; }
+.title-strip b { font-size: 30px; letter-spacing: -0.01em; } .title-strip span { font-size: 12px; color: var(--ink-2); }
+.title-meta { font-size: 13px; color: var(--ink-2); max-width: 900px; margin: 0; }
+
+/* ---------- scorecard */
+.nutshell { border-left: 4px solid var(--accent); }
+.nut { font-size: 20px; line-height: 1.35; margin: 2px 0 4px; max-width: 1080px; }
+[id^="s-scorecard"] table.kpis { font-size: 14px; } [id^="s-scorecard"] table.kpis td { padding: 4px 6px; }
+.counters { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 6px; font-size: 12.5px; }
+
+/* ---------- plan */
+.prio { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 21px; padding: 0 6px; border-radius: 6px;
+  background: var(--ink); color: var(--slide); font-size: 11.5px; font-weight: 700; flex: none; }
+.prio.big { min-width: 58px; height: 42px; font-size: 21px; border-radius: 10px; }
+.roadmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 18px; }
+.lane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lane-item { display: flex; gap: 8px; align-items: center; color: var(--ink); background: none; border: 0; padding: 0; font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+.lane-item:hover { text-decoration: underline; }
+.plan-table td { font-size: 13px; padding: 7px 6px; } .plan-table td:nth-child(2) { width: 24%; } .plan-table td:nth-child(3), .plan-table td:nth-child(4) { width: 29%; }
+.plan-slide { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+.plan-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.plan-meta { display: flex; gap: 10px; align-items: center; }
+.io { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.io > div { padding: 12px 16px; border-radius: 10px; background: var(--card); border: 1px solid var(--ring); font-size: 18px; line-height: 1.5; min-width: 0; }
+.io p { margin: 4px 0 0; }
+.io .issue { border-left: 4px solid var(--crit); } .io .outcome { border-left: 4px solid var(--good); }
+.actions { margin: 6px 0 0; padding-left: 24px; font-size: 17px; } .actions li { margin: 7px 0; }
+.plan-measure { display: flex; flex-direction: column; gap: 4px; }
+.measure { display: flex; flex-direction: column; margin-bottom: 12px; } .measure b { font-size: 30px; line-height: 1.15; }
+.target { font-size: 17px; font-weight: 650; }
+
+/* ---------- metro band (inside each slide) */
+.metro { display: flex; gap: 20px; align-items: flex-end; padding: 12px 0 8px; border-bottom: 1px solid var(--grid); flex: none; }
+.metro-line { flex: var(--n, 1) 1 0; min-width: 0; }
+.metro-name { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metro-line.active .metro-name { color: var(--ink); font-weight: 700; }
+.metro-stops { display: flex; position: relative; }
+.metro-stops::before { content: ""; position: absolute; left: 6px; right: 6px; top: 6px; height: 3px; border-radius: 2px; background: var(--c); opacity: .3; }
+.metro-line.active .metro-stops::before { opacity: 1; }
+.stop { flex: 1 1 0; min-width: 0; background: none; border: 0; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--muted); font: inherit; }
+.stop:first-child { align-items: flex-start; } .stop:last-child { align-items: flex-end; } .stop:only-child { align-items: center; }
+.stop i { width: 13px; height: 13px; border-radius: 50%; background: var(--slide); border: 3px solid var(--c); position: relative; z-index: 1; }
+.stop.past i { background: var(--c); }
+.stop.here i { width: 17px; height: 17px; margin-top: -2px; background: var(--c); box-shadow: 0 0 0 2px var(--slide), 0 0 0 4px var(--c); }
+.stop span { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.stop.here span { color: var(--ink); font-weight: 700; } .stop:hover span { color: var(--ink); }
+
+/* ---------- chrome */
+#tip { position: fixed; pointer-events: none; background: var(--card); color: var(--ink); border: 1px solid var(--ring); border-radius: 8px; padding: 6px 9px;
+  font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.15); opacity: 0; transition: opacity .08s; z-index: 20; max-width: 280px; }
+#nav { position: fixed; right: 12px; bottom: 10px; display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); z-index: 10; opacity: .4; transition: opacity .2s; }
+#nav:hover, #nav:focus-within { opacity: 1; }
+#nav button { font: inherit; background: var(--card); color: var(--ink-2); border: 1px solid var(--ring); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+
+/* ---------- overview grid (press O) */
+body.overview { overflow: auto; }
+body.overview #deck { position: static; display: grid; grid-template-columns: repeat(auto-fill, 320px); grid-auto-rows: 180px; gap: 18px; padding: 24px; justify-content: center; }
+body.overview .slide { position: relative; left: auto; top: auto; margin: 0; opacity: 1; visibility: visible; transform: scale(0.25); transform-origin: top left; cursor: pointer; transition: none; }
+body.overview .slide.active { outline: 10px solid var(--accent); }
+body.overview .slide * { pointer-events: none; }
+
+/* ---------- narrow screens: natural scrolling layout */
+@media (max-width: 760px) {
+  #deck { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .slide { position: relative; left: auto; top: auto; margin: 0; width: auto; height: auto; transform: none; opacity: 1; visibility: visible;
+    border-radius: 0; box-shadow: none; padding: 0 16px; border-bottom: 8px solid var(--page); overflow: visible; }
+  .slide-head { padding-top: 16px !important; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cols2, .cols3, .io, .plan-slide { grid-template-columns: minmax(0, 1fr); } .span2 { grid-column: auto; }
+  .hero { font-size: 32px; } .title-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .title-slide .slide-body { padding: 32px 0; }
+  .metro { gap: 8px; } .stop span, .metro-name { display: none; } .metro-line.active .metro-name { display: block; } .stop.here span { display: block; overflow: visible; max-width: none; position: relative; }
+  .card { overflow-x: auto; } .clamp { max-width: none; white-space: normal; }
+  h2 { font-size: 22px; } .nut { font-size: 17px; }
+}
+
+/* ---------- print: one slide per page */
+@page { size: 1280px 720px; margin: 0; }
+@media print {
+  html, body { height: auto; overflow: visible; background: none; }
+  #deck { position: static; }
+  .slide { position: relative; left: auto; top: auto; margin: 0; transform: none; opacity: 1; visibility: visible; box-shadow: none; border-radius: 0;
+    page-break-after: always; break-after: page; }
+  #nav, #tip { display: none; }
+}
+</style>
+</head>
+<body>
+<main id="deck" aria-roledescription="carousel"></main>
+<div id="tip" role="tooltip"></div>
+<nav id="nav" aria-label="Deck controls"><button id="themeBtn" aria-label="Toggle light/dark theme">◐</button><button id="ovBtn" aria-label="Overview of all slides (O)">▦</button><button id="prev" aria-label="Previous slide">←</button><span id="pos"></span><button id="next" aria-label="Next slide">→</button></nav>
+<script id="data" type="application/json">{"metrics":{"repo":"huggingface/speech-to-speech","title":"speech-to-speech","as_of":"2026-10-06","window_days":90,"windows":{"cur":["2026-07-09","2026-10-06"],"prior":["2026-04-10","2026-07-09"]},"kpis":{"issues_opened":{"key":"issues_opened","label":"Issues opened","value":97,"prior":13,"delta":84,"unit":"","status":"na","lower_is_better":false,"note":"","source":"GitHub issues","family":"flow","direction":"neutral"},"issues_closed":{"key":"issues_closed","label":"Issues closed","value":124,"prior":7,"delta":117,"unit":"","status":"na","lower_is_better":false,"note":"","source":"GitHub issues","family":"flow","direction":"up"},"issue_backlog_net":{"key":"issue_backlog_net","label":"Net issue backlog change","value":-27,"prior":6,"delta":-33,"unit":"","status":"na","lower_is_better":true,"note":"opened − closed in window","source":"","family":"flow","direction":"down"},"open_issues":{"key":"open_issues","label":"Open issues (now)","value":48,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"open_issues_over_90d":{"key":"open_issues_over_90d","label":"Open issues older than 90 days","value":25,"prior":null,"delta":null,"unit":"","status":"amber","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"unanswered_open_issues":{"key":"unanswered_open_issues","label":"Open issues with no maintainer reply","value":20,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"median_first_response_days":{"key":"median_first_response_days","label":"Median maintainer first response (issues)","value":0.94,"prior":15.95,"delta":-15.01,"unit":"days","status":"green","lower_is_better":true,"note":"non-maintainer issues; responded ones only","source":"","family":"flow","direction":"down"},"p90_first_response_days":{"key":"p90_first_response_days","label":"p90 maintainer first response (issues)","value":22.73,"prior":107.68,"delta":-84.95,"unit":"days","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"response_within_7d":{"key":"response_within_7d","label":"Issues answered by a maintainer within 7 days","value":0.212,"prior":0.333,"delta":-0.121,"unit":"ratio","status":"na","lower_is_better":false,"note":"n=33 issues ≥7 days old","source":"","family":"flow","direction":"up"},"median_pr_first_response_days":{"key":"median_pr_first_response_days","label":"Median maintainer first response (external PRs)","value":1.41,"prior":0.5,"delta":0.91,"unit":"days","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"prs_opened":{"key":"prs_opened","label":"PRs opened (humans)","value":221,"prior":89,"delta":132,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"neutral"},"prs_merged":{"key":"prs_merged","label":"PRs merged","value":167,"prior":65,"delta":102,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"pr_merge_rate":{"key":"pr_merge_rate","label":"PR merge rate (of closed)","value":0.777,"prior":0.802,"delta":-0.025,"unit":"ratio","status":"green","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"external_pr_merge_rate":{"key":"external_pr_merge_rate","label":"External PR merge rate (of closed)","value":0.636,"prior":0.833,"delta":-0.197,"unit":"ratio","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"median_time_to_merge_days":{"key":"median_time_to_merge_days","label":"Median time to merge","value":0.47,"prior":0.06,"delta":0.41,"unit":"days","status":"green","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"median_time_to_merge_external_days":{"key":"median_time_to_merge_external_days","label":"Median time to merge (external PRs)","value":2.68,"prior":0.5,"delta":2.18,"unit":"days","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"stale_open_prs":{"key":"stale_open_prs","label":"Open PRs idle > 30 days","value":4,"prior":null,"delta":null,"unit":"","status":"green","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"external_pr_share":{"key":"external_pr_share","label":"Share of PRs from outside maintainers","value":0.529,"prior":0.112,"delta":0.417,"unit":"ratio","status":"green","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"external_merged_share":{"key":"external_merged_share","label":"Share of merged PRs from outside maintainers","value":0.407,"prior":0.077,"delta":0.33,"unit":"ratio","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"pr_contributors":{"key":"pr_contributors","label":"PR authors","value":62,"prior":11,"delta":51,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"new_contributors":{"key":"new_contributors","label":"First-time PR authors","value":60,"prior":7,"delta":53,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"issue_reporters":{"key":"issue_reporters","label":"Distinct issue reporters","value":27,"prior":5,"delta":22,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"flow","direction":"up"},"top_merger_share":{"key":"top_merger_share","label":"Share of merges by top merger (maintainer A)","value":0.952,"prior":0.708,"delta":0.244,"unit":"ratio","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"top_author_pr_share":{"key":"top_author_pr_share","label":"Share of PRs by top author (maintainer A)","value":0.443,"prior":0.629,"delta":-0.186,"unit":"ratio","status":"na","lower_is_better":true,"note":"","source":"","family":"flow","direction":"down"},"stars_total":{"key":"stars_total","label":"GitHub stars (total)","value":13376,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"","source":"GitHub API","family":"adoption","direction":"neutral"},"stars_new":{"key":"stars_new","label":"New stars in window","value":7545,"prior":1233,"delta":6312,"unit":"","status":"na","lower_is_better":false,"note":"approx. — derived from assets/star-history.svg @ 2026-09-22","source":"","family":"adoption","direction":"up"},"stars_growth_rate":{"key":"stars_growth_rate","label":"Star growth vs window start","value":1.294,"prior":0.268,"delta":1.026,"unit":"ratio","status":"na","lower_is_better":false,"note":"approx. — derived from assets/star-history.svg @ 2026-09-22","source":"","family":"adoption","direction":"up"},"forks_total":{"key":"forks_total","label":"Forks (total)","value":1697,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"adoption","direction":"neutral"},"forks_new":{"key":"forks_new","label":"New forks","value":1020,"prior":144,"delta":876,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"adoption","direction":"up"},"forks_active":{"key":"forks_active","label":"Forks with own pushes in window","value":152,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"pushedAt after creation (>1h)","source":"","family":"adoption","direction":"up"},"pypi_downloads":{"key":"pypi_downloads","label":"PyPI downloads (no mirrors)","value":21845,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"prior window only partly covered (pypistats data starts 2026-05-04)","source":"pypistats.org","family":"adoption","direction":"up"},"hf_spaces_new":{"key":"hf_spaces_new","label":"New HF Spaces matching search terms","value":0,"prior":1,"delta":-1,"unit":"","status":"na","lower_is_better":false,"note":"search proxy: speech-to-speech, speech_to_speech; capped at 200/query","source":"","family":"adoption","direction":"up"},"releases":{"key":"releases","label":"Releases (GitHub or PyPI)","value":3,"prior":1,"delta":2,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"adoption","direction":"up"},"days_since_release":{"key":"days_since_release","label":"Days since last release","value":31,"prior":null,"delta":null,"unit":"","status":"green","lower_is_better":true,"note":"","source":"","family":"adoption","direction":"down"},"dependents":{"key":"dependents","label":"GitHub dependents (Used by)","value":0,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"best-effort scrape","source":"","family":"adoption","direction":"up"},"commits":{"key":"commits","label":"Commits (non-merge, humans)","value":491,"prior":159,"delta":332,"unit":"","status":"na","lower_is_better":false,"note":"","source":"local git","family":"code","direction":"neutral"},"commit_authors":{"key":"commit_authors","label":"Commit authors","value":36,"prior":6,"delta":30,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"code","direction":"up"},"bus_factor":{"key":"bus_factor","label":"Bus factor (authors covering 50% of commits)","value":1,"prior":1,"delta":0,"unit":"","status":"red","lower_is_better":false,"note":"","source":"","family":"code","direction":"up"},"top_committer_share":{"key":"top_committer_share","label":"Top committer share of commits","value":0.725,"prior":0.811,"delta":-0.086,"unit":"ratio","status":"na","lower_is_better":true,"note":"","source":"","family":"code","direction":"down"},"modules_single_owner":{"key":"modules_single_owner","label":"Modules where one author made >80% of commits","value":6,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"modules with ≥3 commits in window","source":"","family":"code","direction":"down"},"ci_pass_rate_main":{"key":"ci_pass_rate_main","label":"CI pass rate on main","value":0.994,"prior":0.932,"delta":0.062,"unit":"ratio","status":"green","lower_is_better":false,"note":"n=161 runs","source":"GitHub Actions","family":"code","direction":"up"},"ci_pass_rate_pr":{"key":"ci_pass_rate_pr","label":"CI pass rate on PRs","value":0.821,"prior":0.748,"delta":0.073,"unit":"ratio","status":"na","lower_is_better":false,"note":"n=570 runs","source":"","family":"code","direction":"up"},"ci_median_minutes":{"key":"ci_median_minutes","label":"Median CI duration (main)","value":2.78,"prior":2.32,"delta":0.46,"unit":"min","status":"na","lower_is_better":true,"note":"","source":"","family":"code","direction":"down"},"test_loc_ratio":{"key":"test_loc_ratio","label":"Test LOC / source LOC","value":1.492,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"code","direction":"up"},"backends":{"key":"backends","label":"Registered STT/LLM/TTS backends","value":24,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":false,"note":"","source":"","family":"code","direction":"neutral"},"backends_with_tests":{"key":"backends_with_tests","label":"Backends with a matching test file","value":0.958,"prior":null,"delta":null,"unit":"ratio","status":"na","lower_is_better":false,"note":"name-match proxy, not line coverage","source":"","family":"code","direction":"up"},"critical_deps_behind":{"key":"critical_deps_behind","label":"Exact-pinned critical deps behind latest PyPI","value":3,"prior":null,"delta":null,"unit":"of 6 pinned","status":"na","lower_is_better":true,"note":"","source":"pyproject.toml vs PyPI","family":"code","direction":"down"},"critical_deps_unbounded":{"key":"critical_deps_unbounded","label":"Critical deps with no upper bound on some platform","value":2,"prior":null,"delta":null,"unit":"","status":"na","lower_is_better":true,"note":"exposed to breaking upstream releases","source":"","family":"code","direction":"down"},"bug_share":{"key":"bug_share","label":"Share of new issues that are bugs","value":0.536,"prior":0.154,"delta":0.382,"unit":"ratio","status":"na","lower_is_better":true,"note":"labels — gold-prelabel: 96, model:ModernBERT-base_issue-type: 1","source":"","family":"themes","direction":"down"},"classifier_coverage":{"key":"classifier_coverage","label":"New issues with a confident theme label","value":0.99,"prior":null,"delta":null,"unit":"ratio","status":"na","lower_is_better":false,"note":"labels — gold-prelabel: 96, model:ModernBERT-base_issue-type: 1","source":"","family":"themes","direction":"up"},"top_theme_share":{"key":"top_theme_share","label":"Top issue theme share (multilingual)","value":0.177,"prior":null,"delta":null,"unit":"ratio","status":"na","lower_is_better":false,"note":"","source":"","family":"themes","direction":"neutral"}},"context":{"flow":{"maintainers":["maintainer B","maintainer A","maintainer C"],"flow":{"cur":{"opened":97,"closed":124,"net":-27,"closed_completed":119,"resp_med":0.94,"resp_p90":22.73,"sla":0.212,"sla_n":33,"pr_opened":221,"pr_ext_opened":117,"pr_resp_med":1.41,"merged":167,"closed_unmerged":48,"merge_rate":0.777,"ext_merge_rate":0.636,"ttm_med":0.47,"ttm_p90":9.08,"ttm_ext_med":2.68,"ext_share":0.529,"ext_merged_share":0.407,"contributors":62,"new_contributors":60,"issue_reporters":27,"top_author_share":0.443,"top_author":"maintainer A","top_merger_share":0.952,"top_merger":"maintainer A"},"prior":{"opened":13,"closed":7,"net":6,"closed_completed":7,"resp_med":15.95,"resp_p90":107.68,"sla":0.333,"sla_n":6,"pr_opened":89,"pr_ext_opened":10,"pr_resp_med":0.5,"merged":65,"closed_unmerged":16,"merge_rate":0.802,"ext_merge_rate":0.833,"ttm_med":0.06,"ttm_p90":2.57,"ttm_ext_med":0.5,"ext_share":0.112,"ext_merged_share":0.077,"contributors":11,"new_contributors":7,"issue_reporters":5,"top_author_share":0.629,"top_author":"maintainer A","top_merger_share":0.708,"top_merger":"maintainer A"}},"open_issues":48,"unanswered_open_issues":[[659,"Kokoro silently replaces a session-selected voice after one reply in another language"],[630,"Realtime language validation reports steerable backends as unsupported, rejecting languages they do speak"],[627,"Walk open issues oldest-first and close or nominate ones that no longer apply"],[625,"Share Parakeet TDT language list with Orukeet text detection"],[565,"Listener backchannels abort active response mid-playback"],[559,"No user-facing signal while a response is generating on slower local TTS/LLM backends"],[433,"Reduce barge-in latency with reversible pre-confirmation audio ducking"],[366,"Feature Request: Speaker Diarization"],[292,"Add FunASR/SenseVoice as a self-hosted STT option"],[167,"Cargo, the Rust package manager, is not installed or is not on PATH."]],"stale_prs":[[99,"[New feature] Adding visemes as part of the output","contributor 11"],[227,"feat: integrate ModelVerse AI Platform (OpenAI-compatible)","contributor 12"],[228,"feat: integrate ModelVerse AI Platform (OpenAI-compatible)","contributor 13"],[229,"feat: add MiniMax TTS provider (speech-2.8-hd / speech-2.8-turbo)","contributor 14"]]},"adoption":{"releases":[["v1.0.0","2026-09-06"],["v0.2.12","2026-08-05"],["v0.2.11","2026-08-03"],["v0.2.10","2026-06-11"],["2025","2026-02-06"]],"snapshots":[{"date":"2026-10-06","stars":13376,"forks":1697,"watchers":104,"open_issues":48,"open_prs":25}]},"code":{"module_bus_factor":{"packaging":1,"docs":1,"api":1,"tests":1,"TTS":1,"core":1,"STT":1,"config":1,"pipeline":1,"archive":1,"utils":1,"diarization":1,"VAD":1,"demo":1,"LLM":1,"ci":1,"examples":1,"other":1,"scripts":1},"module_top_author_share":{"packaging":0.763,"docs":0.787,"api":0.764,"tests":0.715,"TTS":0.767,"core":0.791,"STT":0.612,"config":0.734,"pipeline":0.69,"archive":1.0,"utils":0.864,"diarization":1.0,"VAD":0.718,"demo":0.893,"LLM":0.719,"ci":1.0,"examples":1.0,"other":0.909,"scripts":0.5},"ci_workflow":"CI","module_tested":{"STT":true,"LLM":true,"TTS":true,"VAD":true,"api":true,"pipeline":true,"diarization":true,"config":true,"utils":true},"backends":{"chat_completions_language_model":true,"chat_tts":true,"facebookmms_tts":true,"faster_whisper_stt":true,"kokoro_tts":true,"language_model":false,"mlx_audio_whisper":true,"nemotron_streaming_stt":true,"omnivoice_tts":true,"openai_realtime_stt":true,"openai_stt":true,"openai_tts":true,"orukeet_stt":true,"paraformer_stt":true,"parakeet_tdt":true,"parakeet_unified_stt":true,"pocket_tts":true,"qwen3_asr_stt":true,"qwen3_tts":true,"responses_api_language_model":true,"sense_voice_stt":true,"supertonic_tts":true,"vllm_realtime_stt":true,"whisper_stt":true},"dependencies":[{"dep":"torch","spec":"torch==2.11.0; platform_system == 'Darwin'; torch>=2.4.0; platform_system != 'Darwin'","pinned":"2.11.0","latest":"2.14.1","behind":true,"pinned_somewhere":true,"unbounded":true},{"dep":"transformers","spec":"transformers==5.18.0; platform_system == 'Darwin'; transformers>=5.18.0,<6; platform_system != 'Darwin'","pinned":"5.18.0","latest":"5.18.0","behind":false,"pinned_somewhere":true,"unbounded":false},{"dep":"mlx","spec":"mlx==0.32.3; platform_system == 'Darwin'","pinned":"0.32.3","latest":"0.32.3","behind":false,"pinned_somewhere":true,"unbounded":false},{"dep":"mlx-lm","spec":"mlx-lm==0.31.3; platform_system == 'Darwin'","pinned":"0.31.3","latest":"0.32.0","behind":true,"pinned_somewhere":true,"unbounded":false},{"dep":"mlx-audio","spec":"mlx-audio==0.4.7; platform_system == 'Darwin'","pinned":"0.4.7","latest":"0.5.8","behind":true,"pinned_somewhere":true,"unbounded":false},{"dep":"nltk","spec":"nltk==3.10.3","pinned":"3.10.3","latest":"3.10.3","behind":false,"pinned_somewhere":true,"unbounded":false},{"dep":"faster-qwen3-tts","spec":"faster-qwen3-tts[ggml]>=0.5.4; platform_system != 'Darwin' and platform_system != 'Windows'; faster-qwen3-tts>=0.5.4; platform_system == 'Windows'","pinned":null,"latest":"0.5.4","behind":false,"pinned_somewhere":false,"unbounded":true},{"dep":"silero-vad","spec":"(not a direct dependency)","pinned":null,"latest":"6.2.3","behind":false,"pinned_somewhere":false,"unbounded":false}],"known_incidents":[{"date":"2026-09-20","title":"mlx 0.32.0 frozen sampling broke Qwen3-TTS (silent tail / stuck vowel)","refs":["#646","#649"]}],"head":"20d41cc"},"themes":{"gate":{"gold_reviewed":false,"rule":"among candidates within 3% macro-F1 of the best with calibrated ECE ≤ 0.1: lowest API cost, then highest coverage at 85% precision, then fastest","types":{"model":"ModernBERT-base_issue-type","passed":true,"reason":"meets gate","macro_f1":0.7881,"ece":0.0623,"accuracy":0.8537,"temperature":0.798,"threshold":0.4274,"coverage":0.988,"selective_precision":0.864,"confusion":{"bug":{"bug":37,"enhancement":0,"question":3},"enhancement":{"bug":0,"enhancement":26,"question":1},"question":{"bug":4,"enhancement":4,"question":7}},"eligible":["ModernBERT-base_issue-type","bge-base-en-v1.5+LR"],"best_f1":0.7881},"themes":{"model":"bge-base-en-v1.5+rules+LR","passed":false,"reason":"macro-F1 0.64 < 0.7","macro_f1":0.6354,"ece":0.0756,"accuracy":0.7073,"temperature":0.437,"threshold":0.6189,"coverage":0.646,"selective_precision":0.811,"confusion":{"install":{"install":2,"macos_mlx":1,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":0,"tools_agent":0,"realtime_api":0,"architecture":0,"docs":0,"other":1},"macos_mlx":{"install":0,"macos_mlx":3,"gpu_device":1,"latency":0,"audio_turn":0,"multilingual":1,"model_request":0,"llm_backend":0,"tools_agent":0,"realtime_api":0,"architecture":0,"docs":0,"other":0},"gpu_device":{"install":0,"macos_mlx":0,"gpu_device":4,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":0,"tools_agent":0,"realtime_api":0,"architecture":0,"docs":0,"other":0},"latency":{"install":0,"macos_mlx":0,"gpu_device":0,"latency":1,"audio_turn":1,"multilingual":0,"model_request":1,"llm_backend":1,"tools_agent":0,"realtime_api":0,"architecture":0,"docs":0,"other":0},"audio_turn":{"install":0,"macos_mlx":0,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":0,"tools_agent":0,"realtime_api":1,"architecture":0,"docs":0,"other":0},"multilingual":{"install":0,"macos_mlx":1,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":9,"model_request":0,"llm_backend":0,"tools_agent":0,"realtime_api":0,"architecture":1,"docs":0,"other":0},"model_request":{"install":0,"macos_mlx":0,"gpu_device":1,"latency":0,"audio_turn":0,"multilingual":1,"model_request":7,"llm_backend":0,"tools_agent":0,"realtime_api":2,"architecture":0,"docs":0,"other":1},"llm_backend":{"install":0,"macos_mlx":0,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":5,"tools_agent":0,"realtime_api":0,"architecture":0,"docs":0,"other":0},"tools_agent":{"install":0,"macos_mlx":0,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":0,"tools_agent":3,"realtime_api":0,"architecture":0,"docs":0,"other":0},"realtime_api":{"install":0,"macos_mlx":0,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":1,"tools_agent":0,"realtime_api":10,"architecture":1,"docs":0,"other":0},"architecture":{"install":0,"macos_mlx":0,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":0,"tools_agent":0,"realtime_api":1,"architecture":6,"docs":0,"other":0},"docs":{"install":1,"macos_mlx":0,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":0,"llm_backend":0,"tools_agent":0,"realtime_api":0,"architecture":0,"docs":1,"other":0},"other":{"install":1,"macos_mlx":0,"gpu_device":0,"latency":0,"audio_turn":0,"multilingual":0,"model_request":2,"llm_backend":1,"tools_agent":0,"realtime_api":0,"architecture":0,"docs":1,"other":7}},"eligible":["bge-base-en-v1.5+rules+LR"],"best_f1":0.6354},"mode":"local"},"available":true,"provenance":{"gold-prelabel":96,"model:ModernBERT-base_issue-type":1},"gold_reviewed":false,"types_ok":true,"themes_ok":true,"pain_map":[{"theme":"multilingual","cur":17,"prior":0,"open":4,"open_share":0.167,"median_days_to_close":11.87,"examples":[[625,"Share Parakeet TDT language list with Orukeet text detection"],[630,"Realtime language validation reports steerable backends as unsupported, rejecting languages they do speak"],[634,"Kokoro alternates voices within a response after a language switch when the session sets a voice"]]},{"theme":"realtime_api","cur":17,"prior":0,"open":6,"open_share":0.167,"median_days_to_close":43.12,"examples":[[104,"Approach for enabling multi client connection"],[547,"Support optional mid-session STT, LLM, and TTS model switching through session.update"],[455,"WebRTC audio clear can replay a stashed output chunk"]]},{"theme":"architecture","cur":10,"prior":2,"open":2,"open_share":0.125,"median_days_to_close":0.94,"examples":[[308,"Refactor speculative turn tracking around global conversation order"],[440,"Add lifecycle support for process-shared backend resources"]]},{"theme":"latency","cur":8,"prior":1,"open":7,"open_share":0.636,"median_days_to_close":349.47,"examples":[[558,"Sending silence on RTC causes noticable per-client background CPU usage"],[479,"Speculative execution during user speech?"],[590,"Extend response latency logging to additional STT, LLM, and TTS backends"]]},{"theme":"audio_turn","cur":7,"prior":0,"open":3,"open_share":0.25,"median_days_to_close":38.94,"examples":[[151,"No Acoustic Echo Cancellation"],[433,"Reduce barge-in latency with reversible pre-confirmation audio ducking"],[565,"Listener backchannels abort active response mid-playback"]]},{"theme":"tools_agent","cur":7,"prior":2,"open":2,"open_share":0.182,"median_days_to_close":6.07,"examples":[[519,"Preserve Responses API reasoning items during tool continuations"],[647,"Tool follow-ups can start speaking while the user is already talking"]]},{"theme":"macos_mlx","cur":6,"prior":0,"open":0,"open_share":0.0,"median_days_to_close":6.55,"examples":[[386,"Consider relaxing the mlx==0.31.1 pin — MLX gained multithreaded support in 0.31.2"],[620,"Make faster-qwen3-tts GGML the macOS default and remove the MLX Qwen3-TTS implementation"],[646,"Qwen3-TTS on macOS: frozen sampling on mlx 0.32.0 causes silent tails and held vowels (fixed by mlx ≥ 0.32.1)"]]},{"theme":"model_request","cur":6,"prior":5,"open":8,"open_share":0.381,"median_days_to_close":50.17,"examples":[[37,"[Feature request] How about adding an optional speech to viseme model at the end of our chain?"],[92,"Suggestion: support GPT-SoVITS as TTS (Fast voice clone - so users can talk to his/her favorite voice other than generic AI voice). "],[66,"Can support Hotword Detection like snowboy?"]]},{"theme":"llm_backend","cur":6,"prior":2,"open":3,"open_share":0.188,"median_days_to_close":352.42,"examples":[[125,"Repeating problem"],[540,"llama-swap support"],[313,"Proposal: split text and vision inference (vision resolver)"]]},{"theme":"other","cur":4,"prior":0,"open":7,"open_share":0.35,"median_days_to_close":150.92,"examples":[[627,"Walk open issues oldest-first and close or nominate ones that no longer apply"],[141,"不想实时录音，传一段音频怎么操作？I don't want to record in real time, how can I upload an audio clip?"],[117,"Setting up a voice conversion pipeline"]]},{"theme":"install","cur":3,"prior":0,"open":2,"open_share":0.087,"median_days_to_close":540.88,"examples":[[172,"Missing Git LFS object causes install failure (tests/audio/ir/h179_Bar_1txts.wav)"],[167,"Cargo, the Rust package manager, is not installed or is not on PATH."]]},{"theme":"docs","cur":3,"prior":0,"open":0,"open_share":0.0,"median_days_to_close":6.07,"examples":[[483,"`--audio_enhancement` help text mentions echo cancellation, which DeepFilterNet cannot provide"],[506,".env.example in #504 advertises unsupported LLM_BACKEND setting"],[520,"Clarify local tool-module commands in Realtime README"]]},{"theme":"gpu_device","cur":2,"prior":1,"open":4,"open_share":0.364,"median_days_to_close":695.56,"examples":[[296,"Feature Request: AMD GPU support via ROCm/Vulkan for STT/TTS models"],[145,"RuntimeError: Cannot execute emptyCache() without MPS backend."],[166,"Can the model run on a lightweight device such as Raspberry Pi?"]]}]}},"charts":{"issue_flow":{"opened":[["2026-04-06",0],["2026-04-13",1],["2026-04-20",0],["2026-04-27",0],["2026-05-04",0],["2026-05-11",0],["2026-05-18",0],["2026-05-25",3],["2026-06-01",1],["2026-06-08",7],["2026-06-15",0],["2026-06-22",0],["2026-06-29",1],["2026-07-06",2],["2026-07-13",7],["2026-07-20",2],["2026-07-27",7],["2026-08-03",14],["2026-08-10",19],["2026-08-17",6],["2026-08-24",5],["2026-08-31",3],["2026-09-07",4],["2026-09-14",2],["2026-09-21",5],["2026-09-28",19]],"closed":[["2026-04-06",0],["2026-04-13",2],["2026-04-20",0],["2026-04-27",0],["2026-05-04",0],["2026-05-11",0],["2026-05-18",0],["2026-05-25",0],["2026-06-01",0],["2026-06-08",2],["2026-06-15",2],["2026-06-22",1],["2026-06-29",0],["2026-07-06",0],["2026-07-13",5],["2026-07-20",0],["2026-07-27",4],["2026-08-03",8],["2026-08-10",23],["2026-08-17",11],["2026-08-24",9],["2026-08-31",3],["2026-09-07",0],["2026-09-14",0],["2026-09-21",5],["2026-09-28",24]]},"pr_flow":{"opened":[["2026-04-06",2],["2026-04-13",7],["2026-04-20",11],["2026-04-27",12],["2026-05-04",18],["2026-05-11",1],["2026-05-18",2],["2026-05-25",9],["2026-06-01",4],["2026-06-08",7],["2026-06-15",5],["2026-06-22",2],["2026-06-29",8],["2026-07-06",6],["2026-07-13",14],["2026-07-20",4],["2026-07-27",34],["2026-08-03",29],["2026-08-10",19],["2026-08-17",23],["2026-08-24",10],["2026-08-31",10],["2026-09-07",4],["2026-09-14",6],["2026-09-21",30],["2026-09-28",28]],"merged":[["2026-04-06",0],["2026-04-13",6],["2026-04-20",8],["2026-04-27",8],["2026-05-04",15],["2026-05-11",0],["2026-05-18",1],["2026-05-25",7],["2026-06-01",2],["2026-06-08",6],["2026-06-15",1],["2026-06-22",3],["2026-06-29",7],["2026-07-06",2],["2026-07-13",12],["2026-07-20",1],["2026-07-27",14],["2026-08-03",23],["2026-08-10",16],["2026-08-17",19],["2026-08-24",10],["2026-08-31",10],["2026-09-07",0],["2026-09-14",0],["2026-09-21",22],["2026-09-28",36]]},"backlog_age":{"0-7d":7,"7-30d":5,"30-90d":11,">90d":25},"ttm_dist":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.03,0.03,0.03,0.03,0.03,0.03,0.04,0.04,0.04,0.04,0.04,0.04,0.05,0.05,0.06,0.06,0.06,0.06,0.06,0.07,0.07,0.08,0.09,0.1,0.12,0.12,0.13,0.14,0.14,0.14,0.14,0.21,0.22,0.28,0.33,0.33,0.35,0.4,0.44,0.47,0.51,0.56,0.63,0.63,0.63,0.66,0.66,0.8,0.85,0.86,0.87,0.88,0.89,0.9,0.9,0.92,0.94,0.96,1.06,1.08,1.08,1.09,1.12,1.19,1.19,1.19,1.2,1.36,1.41,1.45,1.51,1.57,1.68,1.78,1.92,2.07,2.34,2.44,2.81,2.81,2.93,3.37,3.4,3.68,3.78,3.92,3.96,4.03,4.36,5.09,5.35,5.49,5.54,5.71,6.35,7.0,7.21,7.26,7.33,7.83,8.0,8.17,8.2,8.43,8.95,9.08,9.09,11.57,13.31,13.71,13.89,14.38,16.22,16.54,18.1,21.47,25.72,35.94,38.89,54.67,60.01,104.97,154.7],"resp_dist":[0.02,0.03,0.05,0.23,0.31,0.9,0.94,1.26,3.93,7.03,18.98,23.66,34.16],"pr_authors":[["maintainer A",98],["contributor 1",15],["contributor 2",10],["contributor 3",7],["maintainer B",6],["contributor 4",6],["contributor 5",4],["contributor 6",3],["contributor 7",3],["contributor 8",3],["contributor 9",3],["contributor 10",3]],"mergers":[["maintainer A",159],["maintainer B",5],["maintainer C",3]],"stars_weekly":[["2026-04-06",23],["2026-04-13",22],["2026-04-20",20],["2026-04-27",20],["2026-05-04",20],["2026-05-11",20],["2026-05-18",20],["2026-05-25",39],["2026-06-01",42],["2026-06-08",42],["2026-06-15",43],["2026-06-22",43],["2026-06-29",564],["2026-07-06",523],["2026-07-13",135],["2026-07-20",440],["2026-07-27",4069],["2026-08-03",1210],["2026-08-10",663],["2026-08-17",240],["2026-08-24",144],["2026-08-31",127],["2026-09-07",115],["2026-09-14",113],["2026-09-21",null],["2026-09-28",null]],"stars_cumulative":[["2024-08-07",0],["2024-08-08",111],["2024-08-08",223],["2024-08-09",329],["2024-08-09",440],["2024-08-10",552],["2024-08-10",663],["2024-08-11",769],["2024-08-11",881],["2024-08-11",992],["2024-08-11",1103],["2024-08-12",1210],["2024-08-12",1321],["2024-08-12",1432],["2024-08-12",1539],["2024-08-12",1650],["2024-08-13",1761],["2024-08-13",1873],["2024-08-14",1979],["2024-08-15",2090],["2024-08-19",2202],["2024-08-21",2313],["2024-08-24",2419],["2024-08-27",2531],["2024-08-28",2642],["2024-08-29",2753],["2024-09-05",2860],["2024-09-20",2971],["2024-09-30",3082],["2024-10-16",3189],["2024-10-24",3300],["2024-11-10",3411],["2024-12-19",3523],["2025-02-09",3629],["2025-03-06",3740],["2025-04-04",3852],["2025-06-07",3963],["2025-08-21",4069],["2025-11-29",4181],["2026-02-05",4292],["2026-02-09",4403],["2026-03-14",4510],["2026-04-17",4621],["2026-05-26",4732],["2026-06-13",4839],["2026-07-01",4950],["2026-07-02",5061],["2026-07-03",5173],["2026-07-04",5279],["2026-07-05",5390],["2026-07-06",5502],["2026-07-08",5613],["2026-07-08",5719],["2026-07-09",5831],["2026-07-10",5942],["2026-07-14",6053],["2026-07-20",6160],["2026-07-24",6271],["2026-07-26",6382],["2026-07-26",6489],["2026-07-27",6600],["2026-07-28",6711],["2026-07-28",6823],["2026-07-28",6929],["2026-07-28",7040],["2026-07-28",7152],["2026-07-28",7263],["2026-07-28",7369],["2026-07-29",7481],["2026-07-29",7592],["2026-07-29",7703],["2026-07-29",7810],["2026-07-29",7921],["2026-07-29",8032],["2026-07-30",8139],["2026-07-30",8250],["2026-07-30",8361],["2026-07-30",8473],["2026-07-30",8579],["2026-07-30",8690],["2026-07-30",8802],["2026-07-30",8913],["2026-07-30",9019],["2026-07-30",9131],["2026-07-30",9242],["2026-07-31",9353],["2026-07-31",9460],["2026-07-31",9571],["2026-07-31",9682],["2026-07-31",9789],["2026-08-01",9900],["2026-08-01",10011],["2026-08-01",10123],["2026-08-02",10229],["2026-08-02",10340],["2026-08-02",10452],["2026-08-03",10563],["2026-08-03",10669],["2026-08-04",10781],["2026-08-04",10892],["2026-08-05",11003],["2026-08-05",11110],["2026-08-06",11221],["2026-08-06",11332],["2026-08-07",11439],["2026-08-08",11550],["2026-08-08",11661],["2026-08-09",11773],["2026-08-10",11879],["2026-08-11",11990],["2026-08-11",12102],["2026-08-11",12213],["2026-08-12",12319],["2026-08-13",12431],["2026-08-17",12542],["2026-08-20",12653],["2026-08-23",12760],["2026-08-28",12871],["2026-09-03",12982],["2026-09-09",13089],["2026-09-16",13200],["2026-09-22",13297],["2026-09-22",13297]],"forks_weekly":[["2026-04-06",2],["2026-04-13",5],["2026-04-20",4],["2026-04-27",2],["2026-05-04",8],["2026-05-11",4],["2026-05-18",2],["2026-05-25",9],["2026-06-01",4],["2026-06-08",3],["2026-06-15",2],["2026-06-22",1],["2026-06-29",76],["2026-07-06",84],["2026-07-13",33],["2026-07-20",71],["2026-07-27",371],["2026-08-03",199],["2026-08-10",70],["2026-08-17",53],["2026-08-24",33],["2026-08-31",33],["2026-09-07",37],["2026-09-14",25],["2026-09-21",15],["2026-09-28",17]],"pypi_weekly":[["2026-05-04",728],["2026-05-11",221],["2026-05-18",151],["2026-05-25",871],["2026-06-01",375],["2026-06-08",511],["2026-06-15",375],["2026-06-22",647],["2026-06-29",2379],["2026-07-06",2491],["2026-07-13",1269],["2026-07-20",1414],["2026-07-27",4215],["2026-08-03",4588],["2026-08-10",3252],["2026-08-17",2273],["2026-08-24",1076],["2026-08-31",571],["2026-09-07",590],["2026-09-14",577],["2026-09-21",523],["2026-09-28",394]],"pypi_system":[["Linux",9265],["Windows",5826],["Darwin",5724],["null",967],["other",63]],"pypi_python_minor":[["3.12",9760],["3.14",3563],["3.11",3391],["3.13",3205],["null",967],["3.10",938],["3.15",13],["3.9",8]],"module_churn":[["tests",52775,10889,390],["demo",17361,0,56],["api",10447,1924,148],["STT",8519,748,116],["LLM",5404,5106,96],["core",3969,1508,86],["TTS",3215,449,73],["pipeline",2284,742,58],["docs",1851,1892,122],["VAD",1761,926,39],["config",1327,610,79],["utils",1230,150,22],["examples",965,0,11],["archive",944,119,2],["diarization",938,0,4],["scripts",561,601,4],["ci",468,162,7],["other",350,8263,11],["packaging",163,339,38]],"hotspot_files":[["tests/openai_realtime/test_realtime_service.py",7644],["demo/ws/s2s-ws-client.js",2865],["tests/test_streaming_stt_handler.py",2839],["src/speech_to_speech/STT/openai_compatible_handler.py",2786],["demo/style.css",2754],["src/speech_to_speech/api/openai_realtime/handlers/response.py",2627],["tests/test_backend_registry.py",2361],["tests/test_openai_stt_handler.py",2351],["tests/openai_realtime/test_websocket_router.py",2247],["demo/rtc/s2s-rtc-client.js",2192],["src/speech_to_speech/s2s_pipeline.py",2079],["demo/main.js",2076]],"commit_authors":[["author 1",356],["author 2",23],["author 3",20],["author 4",14],["author 5",13],["author 6",9],["author 7",6],["author 8",4]],"ci_weekly":[["2026-04-20",0.533,15],["2026-04-27",0.681,47],["2026-05-04",0.875,72],["2026-05-11",0.0,1],["2026-05-18",0.85,20],["2026-05-25",0.655,29],["2026-06-01",0.8,10],["2026-06-08",0.846,39],["2026-06-15",0.9,20],["2026-06-22",0.533,15],["2026-06-29",0.923,26],["2026-07-06",0.846,13],["2026-07-13",0.882,34],["2026-07-20",0.667,6],["2026-07-27",0.822,73],["2026-08-03",0.923,130],["2026-08-10",0.885,87],["2026-08-17",0.912,68],["2026-08-24",0.784,37],["2026-08-31",0.911,45],["2026-09-07",0.444,9],["2026-09-14",0.714,7],["2026-09-21",0.817,93],["2026-09-28",0.861,122]],"module_loc":[["api",6738],["LLM",5861],["STT",4342],["TTS",3352],["pipeline",1974],["core",1826],["VAD",1525],["config",1360],["diarization",446],["utils",342]],"type_counts":{"classes":["bug","enhancement","question","unclassified"],"cur":{"bug":[52,51,52],"enhancement":[41,41,41],"question":[4,4,5],"unclassified":[0,0,0]},"prior":{"enhancement":11,"bug":2},"reportable":true},"theme_counts":{"classes":["install","macos_mlx","gpu_device","latency","audio_turn","multilingual","model_request","llm_backend","tools_agent","realtime_api","architecture","docs","other","unclassified"],"cur":{"install":[3,3,4],"macos_mlx":[6,6,7],"gpu_device":[2,2,3],"latency":[8,8,9],"audio_turn":[7,7,8],"multilingual":[17,17,18],"model_request":[6,6,7],"llm_backend":[6,6,7],"tools_agent":[7,7,8],"realtime_api":[17,17,18],"architecture":[10,10,11],"docs":[3,3,4],"other":[4,4,5],"unclassified":[1,0,1]},"prior":{"model_request":5,"gpu_device":1,"architecture":2,"tools_agent":2,"llm_backend":2,"latency":1},"reportable":true}},"families":{"flow":["issues_opened","issues_closed","issue_backlog_net","open_issues","open_issues_over_90d","unanswered_open_issues","median_first_response_days","p90_first_response_days","response_within_7d","median_pr_first_response_days","prs_opened","prs_merged","pr_merge_rate","external_pr_merge_rate","median_time_to_merge_days","median_time_to_merge_external_days","stale_open_prs","external_pr_share","external_merged_share","pr_contributors","new_contributors","issue_reporters","top_merger_share","top_author_pr_share"],"adoption":["stars_total","stars_new","stars_growth_rate","forks_total","forks_new","forks_active","pypi_downloads","hf_spaces_new","releases","days_since_release","dependents"],"code":["commits","commit_authors","bus_factor","top_committer_share","modules_single_owner","ci_pass_rate_main","ci_pass_rate_pr","ci_median_minutes","test_loc_ratio","backends","backends_with_tests","critical_deps_behind","critical_deps_unbounded"],"themes":["bug_share","classifier_coverage","top_theme_share"]}},"narrative":{"author":"Claude Opus 5.5 (agent session, from the metrics digest)","headline":"Reach and contributions multiplied this quarter, but one maintainer now handles 95% of merges.","headline_metrics":["top_merger_share"],"summary_title":"Growth is outpacing maintainer capacity","findings":[{"text":"Merging is a single point of failure and it is getting worse: one maintainer performed 95% of merges (71% in the prior window), bus factor is 1 and the top committer wrote 72% of commits.","metrics":["top_merger_share","bus_factor","top_committer_share"],"severity":"high"},{"text":"Community issues wait: only 21% got a maintainer reply within 7 days (33% prior), and 20 open issues have no maintainer reply at all.","metrics":["response_within_7d","unanswered_open_issues"],"severity":"high"},{"text":"Outside contributors arrived but land less: they opened 53% of PRs (11% prior), yet their merge rate fell to 64% from 83% and their median time to merge rose to 2.7 days from 0.5.","metrics":["external_pr_share","external_pr_merge_rate","median_time_to_merge_external_days"],"severity":"medium"}],"recommendations":[{"priority":1,"text":"Name a second merger and split review ownership by module","issue":"Merging is a single point of failure and getting worse: 95% of merges went through one maintainer (71% prior), bus factor is 1 and 6 modules have one author with over 80% of commits.","outcome":"Reviews and releases keep flowing when the lead maintainer is away, and contributors get a reviewer who knows their module.","actions":["Grant merge rights to a second maintainer and document the merge checklist","Add a CODEOWNERS file mapping STT, TTS, LLM and api to named reviewers","Require one module-owner approval instead of the lead's approval"],"metrics":["top_merger_share","bus_factor","modules_single_owner"],"owner":"lead maintainer","effort":"M","horizon":"this quarter","target":"Under 70% of merges by one person; bus factor of 2 or more"},{"priority":2,"text":"Run a weekly triage rotation with a 7-day first-reply goal","issue":"Community issues wait: only 21% got a maintainer reply within 7 days (33% prior), and 20 open issues have no maintainer reply.","outcome":"Every reporter hears back within a week, so bug reports keep coming and duplicates get closed early.","actions":["Set up a weekly triager rotation across the 3 maintainers","Reply to the 20 unanswered open issues first","Apply theme and type labels during triage to feed this deck"],"metrics":["response_within_7d","unanswered_open_issues"],"owner":"maintainers (rotating)","effort":"S","horizon":"2 weeks","target":"At least 70% of community issues answered within 7 days; at most 5 open issues with no maintainer reply"},{"priority":3,"text":"Open a fast lane for small external PRs","issue":"Outside contributors land less: their merge rate fell to 64% from 83% and their median time to merge rose to 2.7 days from 0.5.","outcome":"First-time contributors see their fixes merged quickly and come back for a second PR.","actions":["Label PRs under ~50 lines as fast-lane","Have the second merger review fast-lane PRs within 2 working days","Publish a short CONTRIBUTING checklist so PRs arrive ready to merge"],"metrics":["external_pr_merge_rate","median_time_to_merge_external_days"],"owner":"second merger","effort":"S","horizon":"this quarter","target":"External PR merge rate of 75% or more; external median time to merge under 2 days"},{"priority":4,"text":"Finish the stale-issue sweep proposed in #627","issue":"25 open issues are older than 90 days, many describing the pre-v1 CLI and install paths.","outcome":"The tracker reflects the current product, so new users and contributors find real, actionable issues.","actions":["Walk open issues oldest-first as #627 proposes","Close what v1.0 superseded with a pointer to the new path","Re-scope the rest into current themes"],"metrics":["open_issues_over_90d"],"owner":"maintainers","effort":"S","horizon":"2 weeks","target":"At most 10 open issues older than 90 days"},{"priority":5,"text":"Bound and refresh the pinned ML dependencies","issue":"3 exact-pinned critical deps lag PyPI and 2 have no upper bound on some platform; the mlx 0.32.0 regression showed the cost of upstream drift.","outcome":"Upstream releases land on a schedule the project controls, not as surprise breakages for users.","actions":["Add upper bounds for torch and faster-qwen3-tts on Linux and Windows","Bump torch, mlx-lm and mlx-audio in one PR behind the install smoke test","Run a monthly dependency check"],"metrics":["critical_deps_behind","critical_deps_unbounded"],"owner":"release owner","effort":"M","horizon":"this quarter","target":"No exact-pinned critical dependency behind PyPI; none without an upper bound"}],"slides":{"flow":{"title":"Inflow rose sharply and closures kept pace","so_what":"97 issues were opened (13 prior) and 124 closed, shrinking the backlog by 27; the remaining risk is the 25 issues older than 90 days.","metrics":["issues_opened","issues_closed","issue_backlog_net","open_issues_over_90d"]},"responsiveness":{"title":"Replies are fast when they happen, but most community issues wait over a week","so_what":"The median first maintainer reply is 0.9 days for issues that got one, yet only 21% were answered within 7 days.","metrics":["median_first_response_days","response_within_7d"]},"contributors":{"title":"The contributor base widened sharply; merging did not","so_what":"62 PR authors (11 prior), 60 of them first-timers, and outsiders opened 53% of PRs; one maintainer still performed 95% of merges.","metrics":["pr_contributors","new_contributors","external_pr_share","top_merger_share"]},"adoption":{"title":"A step change in reach after the summer relaunch","so_what":"About 7,545 new stars (1,233 prior, approximate), 1,020 new forks and 21,845 PyPI downloads; 152 forks pushed their own changes.","metrics":["stars_new","forks_new","pypi_downloads","forks_active"]},"code":{"title":"Tests, the demo and the Realtime API absorbed most of the change","so_what":"491 commits from 36 authors, but one person wrote 72% of them and 6 modules are effectively single-owner.","metrics":["commits","commit_authors","top_committer_share","modules_single_owner"]},"quality":{"title":"CI is healthy; dependency pins are the latent risk","so_what":"Main passes CI 99% of the time; 3 pinned critical deps lag PyPI and 2 have no upper bound.","metrics":["ci_pass_rate_main","critical_deps_behind","critical_deps_unbounded"]},"themes":{"title":"Users hurt most on multilingual behaviour and Realtime protocol edges","so_what":"Multilingual and Realtime API issues each drew 17 new reports; new-model requests keep 8 issues open.","metrics":["top_theme_share"]}},"recs_title":"Improvement plan proposal","nutshells":{"flow":{"text":"Contributions surged and the backlog shrank, but the community waits longer: only 21% of issues get a maintainer reply within 7 days and one person performs 95% of merges.","metrics":["response_within_7d","top_merger_share"]},"adoption":{"text":"Reach stepped up on every channel: about 7,545 new stars, 1,020 new forks and 21,845 PyPI downloads, with the last release 31 days ago.","metrics":["stars_new","forks_new","pypi_downloads","days_since_release"]},"code":{"text":"Engineering hygiene is strong (99% CI pass rate on main) but ownership is concentrated: bus factor of 1, 6 single-owner modules, 3 pinned deps behind; bugs are 54% of new issues.","metrics":["ci_pass_rate_main","bus_factor","modules_single_owner","critical_deps_behind","bug_share"]}},"dropped":[],"source":"Claude Opus 5.5 (agent session, from the metrics digest) — narrative-input-2026-10-06.json","metrics_hash":"6a67f599b273","usage":{"model":null,"input_tokens":0,"output_tokens":0}},"classifier":{"gold_reviewed":false,"rule":"among candidates within 3% macro-F1 of the best with calibrated ECE ≤ 0.1: lowest API cost, then highest coverage at 85% precision, then fastest","types":{"model":"ModernBERT-base_issue-type","passed":true,"reason":"meets gate","macro_f1":0.7881,"ece":0.0623,"accuracy":0.8537,"temperature":0.798,"threshold":0.4274,"coverage":0.988,"selective_precision":0.864,"eligible":["ModernBERT-base_issue-type","bge-base-en-v1.5+LR"],"best_f1":0.7881},"themes":{"model":"bge-base-en-v1.5+rules+LR","passed":false,"reason":"macro-F1 0.64 < 0.7","macro_f1":0.6354,"ece":0.0756,"accuracy":0.7073,"temperature":0.437,"threshold":0.6189,"coverage":0.646,"selective_precision":0.811,"eligible":["bge-base-en-v1.5+rules+LR"],"best_f1":0.6354},"mode":"local"},"headline_kpis":["stars_new","issues_opened","prs_merged","response_within_7d","bus_factor"],"scorecard":[{"id":"flow","title":"Community & flow","tables":{"Responsiveness & backlog":["response_within_7d","median_first_response_days","unanswered_open_issues","open_issues_over_90d","stale_open_prs"],"Contributions":["external_pr_share","new_contributors","pr_merge_rate","external_pr_merge_rate","median_time_to_merge_external_days","top_merger_share"]}},{"id":"adoption","title":"Adoption & reach","tables":{"Reach":["stars_new","forks_new","forks_active","pypi_downloads"],"Releases":["releases","days_since_release"]}},{"id":"code","title":"Codebase, quality & issue themes","tables":{"Ownership & quality":["bus_factor","top_committer_share","modules_single_owner","ci_pass_rate_main","ci_pass_rate_pr","backends_with_tests","critical_deps_behind","critical_deps_unbounded"],"Issue themes":["bug_share","top_theme_share","classifier_coverage"]}}],"target_precision":0.85,"previous_targets":[],"token_report":{"summary":"narrative: 0 in / 0 out tokens (Claude Opus 5.5 (agent session, from the metrics digest) — narrative-input-2026-10-06.json); issue triage: API model typesafe-jev","narrative":{"model":null,"input_tokens":0,"output_tokens":0}},"note":"Example snapshot as of 2026-10-06, not an assessment by the maintainers: issue labels are unreviewed and people are shown by role."}</script>
+<script>/* repo-pulse deck renderer: data.json -> slides. No dependencies; charts are inline SVG. */
+(function () {
+  const D = JSON.parse(document.getElementById("data").textContent);
+  const M = D.metrics, K = M.kpis, C = M.charts, X = M.context, N = D.narrative || {}, B = D.classifier || {};
+  const deck = document.getElementById("deck");
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // ---------- formatting
+  function fmt(v, unit) {
+    if (v === null || v === undefined) return "—";
+    if (unit === "ratio") return (v > 0 && v < 0.1 ? (v * 100).toFixed(1) : Math.round(v * 100)) + "%";
+    if (unit === "days") return v < 1 ? (v * 24).toFixed(v * 24 < 10 ? 1 : 0) + " h" : (v < 10 ? v.toFixed(1) : Math.round(v)) + " d";
+    if (unit === "min") return v.toFixed(1) + " min";
+    if (typeof v === "number") return Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en-US") : (Number.isInteger(v) ? String(v) : v.toFixed(2));
+    return String(v);
+  }
+  function deltaHtml(m) {
+    if (m.prior === null || m.prior === undefined || typeof m.value !== "number") return "";
+    const d = m.value - m.prior;
+    if (Math.abs(d) < 1e-9) return `<span class="delta flat">= prior</span>`;
+    const dir = m.direction || (m.lower_is_better ? "down" : "up");
+    const better = dir === "down" ? d < 0 : d > 0;
+    const cls = dir === "neutral" ? "flat" : better ? "good" : "bad";
+    const arrow = d > 0 ? "▲" : "▼";
+    let txt;
+    if (m.unit === "ratio") txt = (d > 0 ? "+" : "−") + Math.abs(Math.round(d * 100)) + " pts";
+    else if (m.prior > 0 && m.value > 0 && m.value / m.prior >= 3) txt = "×" + (m.value / m.prior).toFixed(1);
+    else if (m.prior <= 0 || m.value < 0) txt = (d > 0 ? "+" : "−") + fmt(Math.abs(d), m.unit);  // % change is meaningless across zero
+    else if (m.prior !== 0 && Math.abs(m.prior) >= 1) txt = (d > 0 ? "+" : "−") + Math.abs(Math.round((d / Math.abs(m.prior)) * 100)) + "%";
+    else txt = (d > 0 ? "+" : "−") + fmt(Math.abs(d), m.unit);
+    const title = dir === "neutral" ? "change vs prior window (neither good nor bad by itself)" : (better ? "improving" : "worsening") + " vs prior window";
+    return `<span class="delta ${cls}" title="${title}">${arrow} ${txt}</span>`;
+  }
+  const STATUS = { green: "on track", amber: "watch", red: "at risk", na: "" };
+  const chip = (s) => (s && s !== "na" ? `<span class="chip ${s}"><i></i>${STATUS[s]}</span>` : "");
+  function tile(key, opts = {}) {
+    const m = K[key];
+    if (!m) return "";
+    const prior = m.prior !== null && m.prior !== undefined ? `<span>prior ${fmt(m.prior, m.unit)}</span>` : "";
+    const unitSuffix = m.unit && !["ratio", "days", "min"].includes(m.unit) ? ` <span class="small muted">${esc(m.unit)}</span>` : "";
+    return `<div class="card tile" title="${esc(m.note || "")}"><div class="lbl">${esc(opts.label || m.label)}${m.note && opts.note !== true ? ' <span class="info" aria-hidden="true">ⓘ</span>' : ""}</div>
+      <div class="val">${fmt(m.value, m.unit)}${unitSuffix}</div><div class="sub">${deltaHtml(m)}${prior}${chip(m.status)}</div>
+      ${m.note && opts.note === true ? `<div class="small muted" style="margin-top:4px">${esc(m.note)}</div>` : ""}</div>`;
+  }
+  const cite = (keys) => (keys && keys.length ? `<div class="cite">${keys.map(esc).join(" · ")}</div>` : "");
+
+  // ---------- tooltip
+  const tip = document.getElementById("tip");
+  document.addEventListener("pointermove", (e) => {
+    const t = e.target.closest && e.target.closest("[data-tip]");
+    if (!t) { tip.style.opacity = 0; return; }
+    tip.innerHTML = t.getAttribute("data-tip");
+    const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+    const y = Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
+    tip.style.left = x + "px"; tip.style.top = y + "px"; tip.style.opacity = 1;
+  });
+
+  // ---------- charts
+  const niceMax = (v) => { if (v <= 0) return 1; if (v <= 1) return 1; const raw = v / 4; const p = Math.pow(10, Math.floor(Math.log10(raw))); const n = raw / p; const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; return Math.max(step, raw >= 1 ? Math.ceil(step) : step) * 4; };
+  const shortDate = (s) => { const d = new Date(s + "T00:00:00Z"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }); };
+
+  /** Weekly series line chart; shades the current window. series: [{name, color, points:[[date, v]]}] */
+  const tickFmt = (v) => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en-US") : Number.isInteger(v) ? String(v) : v.toFixed(1));
+  function lineChart(series, { h = 220, W = 640, yFmt = tickFmt, unit = "", windowStart = M.windows.cur[0], yMax = null } = {}) {
+    const pad = { l: 40, r: 12, t: 10, b: 24 };
+    const xs = series[0].points.map((p) => p[0]);
+    const vals = series.flatMap((s) => s.points.map((p) => p[1]).filter((v) => v !== null));
+    const max = yMax ?? niceMax(Math.max(...vals, 0));
+    const x = (i) => pad.l + (i / Math.max(xs.length - 1, 1)) * (W - pad.l - pad.r);
+    const y = (v) => h - pad.b - (v / max) * (h - pad.t - pad.b);
+    const wi = xs.findIndex((d) => d >= windowStart);
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" role="img">`;
+    if (wi >= 0) s += `<rect class="band" x="${x(wi)}" y="${pad.t}" width="${W - pad.r - x(wi)}" height="${h - pad.t - pad.b}"/>` +
+      `<text x="${x(wi) + 4}" y="${pad.t + 11}">current window</text>`;
+    for (let k = 0; k <= 4; k++) { const v = (max / 4) * k; s += `<line class="gridline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${yFmt(v)}</text>`; }
+    s += `<line class="baseline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}"/>`;
+    const step = Math.ceil(xs.length / 6);
+    xs.forEach((d, i) => { if (i % step === 0) s += `<text x="${x(i)}" y="${h - 6}" text-anchor="middle">${shortDate(d)}</text>`; });
+    series.forEach((se) => {
+      let dpath = "", pen = false;
+      se.points.forEach((p, i) => { if (p[1] === null) { pen = false; return; } dpath += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(p[1]).toFixed(1); pen = true; });
+      s += `<path d="${dpath}" fill="none" stroke="${se.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      const last = se.points.length - 1;
+      if (se.points[last][1] !== null) s += `<circle cx="${x(last)}" cy="${y(se.points[last][1])}" r="4" fill="${se.color}" stroke="var(--surface)" stroke-width="2"/>`;
+    });
+    // hover columns
+    xs.forEach((d, i) => {
+      const w = (W - pad.l - pad.r) / Math.max(xs.length - 1, 1);
+      const tipTxt = `<b>week of ${shortDate(d)}</b><br>` + series.map((se) => `<span style="color:${se.color}">●</span> ${esc(se.name)}: ${se.points[i][1] === null ? "—" : yFmt(se.points[i][1])}${unit}`).join("<br>");
+      s += `<rect class="hit" x="${x(i) - w / 2}" y="${pad.t}" width="${w}" height="${h - pad.t - pad.b}" data-tip="${esc(tipTxt)}"/>`;
+    });
+    return s + "</svg>";
+  }
+  function legend(items) { return `<div class="legend">${items.map(([n, c]) => `<span><i style="background:${c}"></i>${esc(n)}</span>`).join("")}</div>`; }
+
+  /** Vertical bars for a weekly series (single measure). */
+  function weeklyBars(points, { h = 200, W = 640, color = "var(--s1)", name = "", windowStart = M.windows.cur[0] } = {}) {
+    const pad = { l: 44, r: 8, t: 10, b: 24 };
+    const vals = points.map((p) => p[1] ?? 0);
+    const max = niceMax(Math.max(...vals, 0));
+    const bw = (W - pad.l - pad.r) / points.length;
+    const y = (v) => h - pad.b - (v / max) * (h - pad.t - pad.b);
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" role="img">`;
+    const wi = points.findIndex((p) => p[0] >= windowStart);
+    if (wi >= 0) s += `<rect class="band" x="${pad.l + wi * bw}" y="${pad.t}" width="${W - pad.r - pad.l - wi * bw}" height="${h - pad.t - pad.b}"/>`;
+    for (let k = 0; k <= 4; k++) { const v = (max / 4) * k; s += `<line class="gridline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${tickFmt(v)}</text>`; }
+    const step = Math.ceil(points.length / 6);
+    points.forEach((p, i) => {
+      const x0 = pad.l + i * bw + 1, w = Math.max(bw - 2, 1);
+      if (p[1] !== null && p[1] > 0) {
+        const top = y(p[1]), r = Math.min(4, w / 2, (y(0) - top));
+        s += `<path class="mark" fill="${color}" d="M${x0},${y(0)} V${top + r} q0,-${r} ${r},-${r} H${x0 + w - r} q${r},0 ${r},${r} V${y(0)} Z"/>`;
+      }
+      s += `<rect class="hit" x="${x0}" y="${pad.t}" width="${w}" height="${h - pad.t - pad.b}" data-tip="${esc(`<b>week of ${shortDate(p[0])}</b><br>${name}: ${p[1] === null ? "—" : fmt(p[1])}`)}"/>`;
+      if (i % step === 0) s += `<text x="${x0 + w / 2}" y="${h - 6}" text-anchor="middle">${shortDate(p[0])}</text>`;
+    });
+    s += `<line class="baseline" x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}"/>`;
+    return s + "</svg>";
+  }
+
+  /** Horizontal bars. rows: [{label, value, prior?, lo?, hi?, color?, tip?, note?}] */
+  const EMPTY = (msg = "Nothing in this window.") => `<div class="empty">${esc(msg)}</div>`;
+  function hbars(rows, { labelW = 150, valFmt = (v) => fmt(v), max = null, priorName = "prior window", rowH = 26, W = 640, empty } = {}) {
+    if (!rows.length || rows.every((r) => !r.value && !r.prior)) return EMPTY(empty);
+    const pad = { t: 4, b: 4, r: 56 };
+    const h = pad.t + pad.b + rows.length * rowH;
+    const mx = max ?? niceMax(Math.max(...rows.map((r) => Math.max(r.value ?? 0, r.hi ?? 0, r.prior ?? 0)), 0.0001));
+    const x = (v) => labelW + (v / mx) * (W - labelW - pad.r);
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" role="img">`;
+    rows.forEach((r, i) => {
+      const yc = pad.t + i * rowH + rowH / 2, bh = 14;
+      s += `<text class="lab" x="${labelW - 8}" y="${yc + 4}" text-anchor="end">${esc(r.label)}</text>`;
+      const w = Math.max(x(r.value ?? 0) - labelW, 0);
+      if (w > 0) { const rr = Math.min(4, w); s += `<path class="mark" fill="${r.color || "var(--s1)"}" d="M${labelW},${yc - bh / 2} H${labelW + w - rr} q${rr},0 ${rr},${rr} V${yc + bh / 2 - rr} q0,${rr} -${rr},${rr} H${labelW} Z"/>`; }
+      if (r.lo !== undefined && r.lo !== null && r.hi !== null) s += `<line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${yc}" y2="${yc}" stroke="var(--ink-2)" stroke-width="1.5"/><line x1="${x(r.lo)}" x2="${x(r.lo)}" y1="${yc - 4}" y2="${yc + 4}" stroke="var(--ink-2)" stroke-width="1.5"/><line x1="${x(r.hi)}" x2="${x(r.hi)}" y1="${yc - 4}" y2="${yc + 4}" stroke="var(--ink-2)" stroke-width="1.5"/>`;
+      if (r.prior !== undefined && r.prior !== null) s += `<line x1="${x(r.prior)}" x2="${x(r.prior)}" y1="${yc - 9}" y2="${yc + 9}" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/>`;
+      s += `<text class="val" x="${Math.max(x(r.value ?? 0), x(r.hi ?? 0)) + 6}" y="${yc + 4}">${valFmt(r.value)}${r.note ? ` <tspan class="muted" style="fill:var(--muted);font-weight:400">${esc(r.note)}</tspan>` : ""}</text>`;
+      const tipTxt = r.tip || `<b>${esc(r.label)}</b><br>${valFmt(r.value)}${r.prior !== undefined && r.prior !== null ? `<br>${priorName}: ${valFmt(r.prior)}` : ""}${r.lo !== undefined && r.lo !== null ? `<br>90% interval: ${valFmt(r.lo)}–${valFmt(r.hi)}` : ""}`;
+      s += `<rect class="hit" x="0" y="${yc - rowH / 2}" width="${W}" height="${rowH}" data-tip="${esc(tipTxt)}"/>`;
+    });
+    s += `<line class="baseline" x1="${labelW}" x2="${labelW}" y1="0" y2="${h}"/>`;
+    return s + "</svg>";
+  }
+
+  function histogram(values, edges, labels, { color = "var(--s1)", extra = null, rowH = 26, W = 640 } = {}) {
+    const counts = labels.map(() => 0);
+    values.forEach((v) => { for (let i = 0; i < edges.length - 1; i++) if (v >= edges[i] && v < edges[i + 1]) { counts[i]++; break; } });
+    const rows = labels.map((l, i) => ({ label: l, value: counts[i], color }));
+    if (extra) rows.push(extra);
+    return hbars(rows, { labelW: 110, rowH, W });
+  }
+
+  // ---------- slides (each is a fixed 1280x720 canvas; content is sized to fit)
+  const slides = [];
+  const ns = (id) => (N.slides && N.slides[id]) || {};
+  const T = (id, fallback) => ns(id).title || fallback;
+  /** section: metro line name; station: short label on the map */
+  const S = (id, { kicker, title, sowhat = "", metrics = [], section, station, cls = "" }, body) =>
+    slides.push({ id, section, station, cls, kicker, title, sowhat, metrics, body });
+  const tiles = (keys) => `<div class="tiles">${keys.filter((k) => K[k]).map((k) => tile(k)).join("")}</div>`;
+  const famNames = { flow: "Community & flow", adoption: "Adoption & reach", code: "Codebase & quality", themes: "Issue themes" };
+  const kpiTable = (keys) => `<table class="kpis"><thead><tr><th>Indicator</th><th class="num">Now</th><th class="num">Prior</th><th class="num">Change</th><th></th></tr></thead><tbody>${
+    keys.filter((k) => K[k]).map((k) => { const m = K[k];
+      return `<tr title="${esc(m.note)}"><td>${esc(m.label)}</td><td class="num"><b>${fmt(m.value, m.unit)}</b></td><td class="num muted">${m.prior !== null && m.prior !== undefined ? fmt(m.prior, m.unit) : ""}</td><td class="num">${deltaHtml(m)}</td><td>${chip(m.status)}</td></tr>`; }).join("")}</tbody></table>`;
+  const plan = (N.recommendations || []).slice().sort((a, b) => (a.priority || 99) - (b.priority || 99));
+
+  // 1 title
+  S("title", { cls: "title-slide" },
+    `<div class="title-wrap"><div class="kicker">${esc(M.repo)} · project pulse · edition ${esc(M.as_of)}</div>
+     <h1 class="hero">${esc(N.headline || "Project health: last " + M.window_days + " days vs the " + M.window_days + " before")}</h1>
+     <div class="title-strip">${(D.headline_kpis || []).filter((k) => K[k]).map((k) => `<div><b>${fmt(K[k].value, K[k].unit)}</b><span>${esc(K[k].label)}</span>${deltaHtml(K[k])}</div>`).join("")}</div>
+     <p class="title-meta">Current window ${esc(M.windows.cur[0])} → ${esc(M.windows.cur[1])} vs prior ${esc(M.windows.prior[0])} → ${esc(M.windows.prior[1])}.
+     Numbers are computed from ${["GitHub", "git", K.pypi_downloads ? "PyPI" : "", K.hf_spaces_new ? "the HF Hub" : ""].filter(Boolean).join(", ")}; every narrative claim is checked against them.</p>
+     ${D.note ? `<p class="title-meta"><b>${esc(D.note)}</b></p>` : ""}
+     <p class="title-meta muted">Press → to start · O for overview · narrative: ${esc(N.source || "none")}</p></div>`);
+
+  // 2 executive summary
+  S("summary", { kicker: "Executive summary", title: N.summary_title || "What maintainers need to know", section: "Overview", station: "Summary" },
+    `${tiles(D.headline_kpis || [])}
+     <div class="cols2 grow"><div class="card"><h3>Key findings</h3>${(N.findings || []).slice(0, 3).map((f) =>
+      `<div class="finding"><span class="sev ${esc(f.severity || "medium")}">${esc(f.severity || "")}</span><div>${esc(f.text)}${cite(f.metrics)}</div></div>`).join("") || '<p class="muted">No findings.</p>'}</div>
+     <div class="card"><h3>Improvement plan: top priorities</h3>${plan.slice(0, 3).map((r) =>
+      `<div class="finding"><span class="prio">P${r.priority || ""}</span><div><b>${esc(r.text)}</b><div class="small muted">${esc(r.outcome || r.why || "")}</div><div class="small muted">${esc(r.horizon || "")} · effort ${esc(r.effort || "?")} · ${esc(r.owner || "")}</div></div></div>`).join("")}</div></div>`);
+
+  // 3-5 scorecards
+  const SC = Array.isArray(D.scorecard) ? D.scorecard : Object.entries(M.families).map(([id, ks]) => ({ id, title: famNames[id] || id, tables: { [famNames[id] || id]: ks } }));
+  const moveOf = (m) => {
+    if (m.prior === null || m.prior === undefined || typeof m.value !== "number" || m.direction === "neutral" || m.value === m.prior) return "flat";
+    return (m.direction === "down" ? m.value < m.prior : m.value > m.prior) ? "up" : "down";
+  };
+  const scShort = { flow: "Flow", adoption: "Reach", code: "Code" };
+  SC.forEach((sc, i) => {
+    const keys = Object.values(sc.tables).flat().filter((k) => K[k]);
+    if (!keys.length) return;
+    const better = keys.filter((k) => moveOf(K[k]) === "up").length, worse = keys.filter((k) => moveOf(K[k]) === "down").length;
+    const risk = keys.filter((k) => K[k].status === "red").length, watch = keys.filter((k) => K[k].status === "amber").length;
+    const nut = (N.nutshells || {})[sc.id] || {};
+    const counters = `<div class="counters"><span class="delta good">▲ ${better} improving</span><span class="delta bad">▼ ${worse} worsening</span>${risk ? `<span class="chip red"><i></i>${risk} at risk</span>` : ""}${watch ? `<span class="chip amber"><i></i>${watch} to watch</span>` : ""}<span class="muted small">${keys.length} indicators</span></div>`;
+    S(`scorecard-${sc.id}`, { kicker: `Scorecard ${i + 1}/${SC.length}`, title: sc.title, section: "Scorecard", station: scShort[sc.id] || sc.title },
+      `<div class="card nutshell"><div class="kicker">In a nutshell</div><p class="nut">${esc(nut.text || "")}</p>${cite(nut.metrics)}${counters}</div>
+       <div class="cols2">${Object.entries(sc.tables).map(([t, ks]) => `<div class="card"><h3>${esc(t)}</h3>${kpiTable(ks)}</div>`).join("")}</div>`);
+  });
+
+  // 6 flow
+  const issueSeries = [{ name: "opened", color: "var(--s2)", points: C.issue_flow.opened }, { name: "closed", color: "var(--s1)", points: C.issue_flow.closed }];
+  const prSeries = [{ name: "opened", color: "var(--s2)", points: C.pr_flow.opened }, { name: "merged", color: "var(--s1)", points: C.pr_flow.merged }];
+  S("flow", { kicker: "Deep dive · community & flow", title: T("flow", "Issue and PR flow"), sowhat: ns("flow").so_what, metrics: ns("flow").metrics, section: "Deep dives", station: "Flow" },
+    `${tiles(["issues_opened", "issues_closed", "issue_backlog_net", "open_issues_over_90d", "prs_merged"])}
+     <div class="cols3 grow"><div class="card"><h3>Issues per week</h3>${legend([["opened", "var(--s2)"], ["closed", "var(--s1)"]])}${lineChart(issueSeries, { W: 420, h: 300 })}</div>
+     <div class="card"><h3>Pull requests per week (humans)</h3>${legend([["opened", "var(--s2)"], ["merged", "var(--s1)"]])}${lineChart(prSeries, { W: 420, h: 300 })}</div>
+     <div class="card"><h3>Open issues by age (${K.open_issues.value} open)</h3>${hbars(Object.entries(C.backlog_age).map(([k, v]) => ({ label: k, value: v, color: k === ">90d" ? "var(--s2)" : "var(--s1)" })), { labelW: 70, W: 420, rowH: 46 })}
+       <p class="small muted">Complete weeks only; shaded = current window.</p></div></div>`);
+
+  // 7 responsiveness
+  const unans = K.unanswered_open_issues.value;
+  S("responsiveness", { kicker: "Deep dive · community & flow", title: T("responsiveness", "How fast maintainers respond and merge"), sowhat: ns("responsiveness").so_what, metrics: ns("responsiveness").metrics, section: "Deep dives", station: "Response" },
+    `${tiles(["response_within_7d", "median_first_response_days", "median_pr_first_response_days", "median_time_to_merge_external_days"])}
+     <div class="cols3 grow"><div class="card"><h3>First maintainer reply, community issues this window</h3>
+       ${histogram(C.resp_dist, [0, 1, 3, 7, 30, 1e9], ["< 1 day", "1–3 days", "3–7 days", "7–30 days", "> 30 days"], { rowH: 40, W: 420, extra: { label: "no reply yet", value: unans, color: "var(--s2)", tip: `<b>${unans} open issues</b> have no maintainer reply at all` } })}</div>
+     <div class="card"><h3>Time to merge, PRs merged this window</h3>${histogram(C.ttm_dist, [0, 1 / 24, 1, 3, 7, 1e9], ["< 1 hour", "1 h – 1 day", "1–3 days", "3–7 days", "> 7 days"], { rowH: 46, W: 420 })}</div>
+     <div class="card"><h3>Latest issues with no maintainer reply</h3><table class="compact"><tbody>${(X.flow.unanswered_open_issues || []).slice(0, 6).map(([n, t]) => `<tr><td class="num">#${n}</td><td class="clamp">${esc(t)}</td></tr>`).join("")}</tbody></table></div></div>`);
+
+  // 8 contributors
+  const maint = new Set(X.flow.maintainers);
+  S("contributors", { kicker: "Deep dive · community & flow", title: T("contributors", "Who is contributing"), sowhat: ns("contributors").so_what, metrics: ns("contributors").metrics, section: "Deep dives", station: "People" },
+    `${tiles(["pr_contributors", "new_contributors", "external_pr_share", "top_merger_share", "bus_factor"])}
+     <div class="cols3 grow"><div class="card span2"><h3>PRs opened this window, by author</h3>${legend([["maintainer", "var(--s1)"], ["outside contributor", "var(--s3)"]])}
+       ${hbars(C.pr_authors.slice(0, 9).map(([a, n]) => ({ label: a, value: n, color: maint.has(a) ? "var(--s1)" : "var(--s3)" })), { labelW: 150, rowH: 30, W: 780 })}</div>
+     <div class="card"><h3>Who merges</h3>${hbars((C.mergers || []).map(([a, n]) => ({ label: a || "?", value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420, empty: "No PRs merged in this window." })}
+       <h3 style="margin-top:10px">Commits, by author</h3>${hbars((C.commit_authors || []).slice(0, 5).map(([a, n]) => ({ label: a, value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420 })}</div></div>`);
+
+  // 9 adoption
+  const pct = (arr) => { const t = arr.reduce((a, [, v]) => a + v, 0) || 1; return arr.slice(0, 4).map(([k, v]) => `${esc(k)} ${Math.round((v / t) * 100)}%`).join(" · "); };
+  S("adoption", { kicker: "Deep dive · adoption & reach", title: T("adoption", "Adoption"), sowhat: ns("adoption").so_what, metrics: ns("adoption").metrics, section: "Deep dives", station: "Adoption" },
+    `${tiles(["stars_new", "forks_new", "forks_active", "pypi_downloads", "days_since_release"])}
+     <div class="cols3 grow"><div class="card"><h3>New stars per week ${/approx/.test(K.stars_new?.note || "") ? '<span class="pill">approx.</span>' : ""}</h3>${C.stars_weekly ? weeklyBars(C.stars_weekly, { name: "new stars", W: 420, h: 290 }) : '<p class="muted">no star history</p>'}
+       <p class="small muted">${esc(K.stars_new?.note || "From the GitHub stargazers API.")}</p></div>
+     ${C.pypi_weekly ? `<div class="card"><h3>PyPI downloads per week</h3>${weeklyBars(C.pypi_weekly.filter((p) => p[0] >= M.windows.prior[0]), { name: "downloads", W: 420, h: 290 })}
+       <p class="small muted">${esc(K.pypi_downloads?.note || "No mirrors.")}</p></div>` : `<div class="card"><h3>New forks per week</h3>${weeklyBars(C.forks_weekly, { name: "new forks", W: 420, h: 290 })}</div>`}
+     <div class="card">${(C.pypi_system || []).length ? `<h3>Who downloads (this window)</h3><p class="small"><b>OS</b><br>${pct(C.pypi_system)}</p><p class="small"><b>Python</b><br>${pct(C.pypi_python_minor || [])}</p>` : ""}
+       <h3>Releases</h3><p class="small">${(X.adoption.releases || []).slice(0, 4).map(([t, d]) => `${esc(t)} <span class="muted">${esc(d)}</span>`).join("<br>")}</p></div></div>`);
+
+  // 10 code
+  const tested = X.code.module_tested || {}, owner = X.code.module_top_author_share || {};
+  const churnRows = (C.module_churn || []).filter((r) => !["other"].includes(r[0])).slice(0, 10).map(([m, cur, prior, commits]) => ({
+    label: m, value: cur, prior, color: "var(--s1)",
+    note: `${commits} commits${owner[m] > 0.8 && commits >= 3 ? " · single-owner" : ""}${m in tested && !tested[m] ? " · no tests" : ""}`,
+    tip: `<b>${esc(m)}</b><br>lines changed: ${fmt(cur)} (prior ${fmt(prior)})<br>commits: ${commits}<br>top author share: ${owner[m] !== undefined ? Math.round(owner[m] * 100) + "%" : "—"}${m in tested ? `<br>matching tests: ${tested[m] ? "yes" : "no"}` : ""}` }));
+  S("code", { kicker: "Deep dive · codebase", title: T("code", "Where the code is changing"), sowhat: ns("code").so_what, metrics: ns("code").metrics, section: "Deep dives", station: "Code" },
+    `${tiles(["commits", "commit_authors", "top_committer_share", "modules_single_owner", "test_loc_ratio"])}
+     <div class="cols2 grow"><div class="card"><h3>Lines changed per module (bar = now, tick = prior)</h3>${hbars(churnRows, { labelW: 80, rowH: 33, W: 600, empty: "No commits landed in this window." })}</div>
+     <div class="card"><h3>Hottest files this window</h3>${(C.hotspot_files || []).length ? "" : EMPTY("No files changed in this window.")}<table class="compact"><tbody>${(C.hotspot_files || []).slice(0, 11).map(([f, n]) => `<tr><td class="clamp mono">${esc(f)}</td><td class="num">${fmt(n)}</td></tr>`).join("")}</tbody></table></div></div>`);
+
+  // 11 quality
+  const deps = X.code.dependencies || [];
+  const untested = Object.entries(X.code.backends || {}).filter(([, t]) => !t).map(([b]) => b);
+  S("quality", { kicker: "Deep dive · quality & risk", title: T("quality", "CI, tests and dependency risk"), sowhat: ns("quality").so_what, metrics: ns("quality").metrics, section: "Deep dives", station: "Quality" },
+    `${tiles(["ci_pass_rate_main", "ci_pass_rate_pr", "ci_median_minutes", "backends_with_tests", "critical_deps_behind"])}
+     <div class="cols2 grow"><div class="card"><h3>Weekly CI pass rate (all CI runs)</h3>${(C.ci_weekly || []).length ? lineChart([{ name: "pass rate", color: "var(--s1)", points: C.ci_weekly.map(([d, r]) => [d, r]) }], { yFmt: (v) => Math.round(v * 100) + "%", yMax: 1, W: 600, h: 290 }) : EMPTY("No CI runs on record for this workflow.")}
+       ${Object.keys(X.code.backends || {}).length ? `<p class="small muted">Backends without a matching test file: ${untested.map(esc).join(", ") || "none"} (file-name match, not line coverage).</p>` : ""}</div>
+     <div class="card"><h3>Critical dependencies</h3><table class="compact"><thead><tr><th>Package</th><th>Pinned</th><th>Latest</th><th></th></tr></thead><tbody>${deps.map((d) =>
+       `<tr><td>${esc(d.dep)}</td><td>${esc(d.pinned || (d.spec.startsWith("(") ? "—" : "range"))}</td><td>${esc(d.latest || "?")}</td><td>${d.behind ? '<span class="chip amber"><i></i>behind</span>' : ""}${d.unbounded ? ' <span class="chip red"><i></i>no upper bound</span>' : ""}</td></tr>`).join("")}</tbody></table>
+       ${(X.code.known_incidents || []).map((i) => `<p class="small muted">Incident ${esc(i.date)}: ${esc(i.title)} (${(i.refs || []).map(esc).join(", ")})</p>`).join("")}</div></div>`);
+
+  // 12 themes
+  const th = X.themes || {};
+  if (th.available) {
+    const tc = C.theme_counts, ty = C.type_counts;
+    const themeRows = tc.classes.filter((c) => tc.cur[c][0] > 0 || (tc.prior[c] || 0) > 0).sort((a, b) => tc.cur[b][0] - tc.cur[a][0]).map((c) => ({
+      label: c, value: tc.cur[c][0], lo: tc.cur[c][1], hi: tc.cur[c][2], prior: tc.prior[c] || 0, color: c === "unclassified" ? "var(--axis)" : "var(--s1)" }));
+    const typeRows = ty.classes.filter((c) => ty.cur[c][0] > 0).map((c) => ({ label: c, value: ty.cur[c][0], prior: ty.prior[c] || 0, color: c === "bug" ? "var(--s2)" : "var(--s1)" }));
+    const pm = (th.pain_map || []).filter((r) => r.cur || r.open);
+    const prov = Object.entries(th.provenance || {}).map(([k, v]) => `${v} ${k}`).join(", ");
+    const gateMsg = !th.themes_ok ? `<div class="warnbox">Theme counts hidden: the issue classifier did not pass the accuracy gate (${esc((B.themes || {}).reason || "")}).</div>` :
+      (!th.gold_reviewed ? `<div class="warnbox">Provisional: labels come from a one-time LLM pre-label pass (${esc(prov)}) not yet reviewed by a maintainer.</div>` : "");
+    S("themes", { kicker: "Deep dive · issue themes", title: T("themes", "Where users are hurting"), sowhat: ns("themes").so_what, metrics: ns("themes").metrics, section: "Deep dives", station: "Themes" },
+      `${gateMsg}${th.themes_ok ? `<div class="cols3 grow"><div class="card"><h3>New issues by theme (bar = now, tick = prior)</h3>${hbars(themeRows, { labelW: 110, rowH: 27, W: 420 })}</div>
+       <div class="card span2"><h3>Pain map</h3><table class="compact"><thead><tr><th>Theme</th><th class="num">New</th><th class="num">Open</th><th class="num" title="issues closed this window; includes old issues swept in triage">Age at close</th><th>Open examples</th></tr></thead><tbody>${
+         pm.slice(0, 6).map((r) => `<tr><td>${esc(r.theme)}</td><td class="num">${r.cur}</td><td class="num">${r.open}</td><td class="num">${r.median_days_to_close === null ? "—" : fmt(r.median_days_to_close, "days")}</td><td class="clamp">${r.examples.slice(0, 1).map(([n, t]) => `<span title="${esc(t)}">#${n} ${esc(t)}</span>`).join("")}</td></tr>`).join("")}</tbody></table>
+         <h3 style="margin-top:10px">Issue type</h3>${hbars(typeRows, { labelW: 110, rowH: 22, W: 780 })}</div></div>` : ""}`);
+  }
+
+  // 13 improvement plan: overview, then one slide per priority
+  const lanes = ["2 weeks", "this quarter", "next quarter"].filter((h) => plan.some((r) => (r.horizon || "this quarter") === h));
+  S("recs", { kicker: "Improvement plan proposal", title: N.recs_title || "Improvement plan proposal",
+    sowhat: "Ranked by impact on project health and urgency. One slide per priority follows.", section: "Plan", station: "All" },
+    `<div class="card roadmap">${lanes.map((h) => `<div class="lane"><div class="kicker">${esc(h)}</div>${plan.filter((r) => (r.horizon || "this quarter") === h).map((r) =>
+        `<button class="lane-item" data-goto="p${r.priority}"><span class="prio">P${r.priority}</span>${esc(r.text)}</button>`).join("")}</div>`).join("")}</div>
+     <div class="card grow"><table class="plan-table"><thead><tr><th></th><th>Action</th><th>Issue</th><th>Outcome</th><th>When · effort · owner</th></tr></thead><tbody>${
+       plan.map((r) => `<tr><td><span class="prio">P${r.priority}</span></td><td><b>${esc(r.text)}</b></td><td><div class="clamp3">${esc(r.issue || r.why || "")}</div></td><td><div class="clamp3">${esc(r.outcome || "")}</div></td><td class="small">${esc(r.horizon || "")} · ${esc(r.effort || "?")}<br><span class="muted">${esc(r.owner || "")}</span></td></tr>`).join("")
+     }</tbody></table></div>`);
+  plan.forEach((r) => {
+    const now = (r.metrics || []).filter((k) => K[k]).slice(0, 3).map((k) => `<div class="measure"><span class="small muted">${esc(K[k].label)}</span><b>${fmt(K[k].value, K[k].unit)}</b>${deltaHtml(K[k])}</div>`).join("");
+    S(`p${r.priority}`, { kicker: `Improvement plan · priority ${r.priority} of ${plan.length}`, title: r.text, section: "Plan", station: `P${r.priority}` },
+      `<div class="plan-slide grow"><div class="plan-main">
+         <div class="plan-meta"><span class="prio big">P${r.priority}</span><span class="pill">${esc(r.horizon || "")}</span><span class="pill">effort ${esc(r.effort || "?")}</span><span class="small muted">owner: ${esc(r.owner || "")}</span></div>
+         <div class="io"><div class="issue"><div class="kicker">Issue</div><p>${esc(r.issue || r.why || "")}</p>${cite(r.metrics)}</div>
+           <div class="outcome"><div class="kicker">Outcome</div><p>${esc(r.outcome || "")}</p></div></div>
+         ${(r.actions || []).length ? `<div class="card"><div class="kicker">First actions</div><ol class="actions">${r.actions.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></div>` : ""}</div>
+       <aside class="plan-measure card"><div class="kicker">Now</div>${now}<div class="kicker" style="margin-top:12px">Target next edition</div><div class="target">${esc(r.target || "")}</div></aside></div>`);
+  });
+
+  // appendix
+  const tb = D.token_report || {};
+  const bk = B.types ? `<p>Type: <b>${esc(B.types.model)}</b> — macro-F1 ${B.types.macro_f1}, ECE ${B.types.ece}, coverage ${Math.round((B.types.coverage || 0) * 100)}% at ${Math.round((D.target_precision || .85) * 100)}% precision — gate ${B.types.passed ? "passed" : "not passed"}.</p>
+    <p>Theme: <b>${esc(B.themes.model)}</b> — macro-F1 ${B.themes.macro_f1}, ECE ${B.themes.ece}, coverage ${Math.round((B.themes.coverage || 0) * 100)}% — gate ${B.themes.passed ? "passed" : "not passed"} (${esc(B.themes.reason)}).</p>
+    <p class="muted">Mode: <b>${esc(B.mode || "local")}</b> (local = free models only; auto = best measured incl. API; jev = forced). Rule: ${esc(B.rule || "")}. Gold set reviewed: ${B.gold_reviewed ? "yes" : "no"}. Full comparison in out/${esc(M.title || "")}-bakeoff.html.</p>` : '<p class="muted">No classifier bake-off on record.</p>';
+  S("appendix", { kicker: "Appendix", title: "Methodology, sources and caveats", section: "Appendix", station: "Method" },
+    `<div class="cols2 grow small"><div class="card"><h3>Method</h3>
+      <p>Current window = last ${M.window_days} days to ${esc(M.as_of)}; prior = the ${M.window_days} days before. Bots excluded; maintainers = people who merged a PR in the last year.
+      Response times count the first comment or review by a maintainer on items opened by someone else.</p>
+      <h3>Sources</h3><p>GitHub via <code>gh</code> (issues, PRs, reviews, stars, forks, releases, Actions runs of <code>${esc(X.code.ci_workflow || "CI")}</code>); git clone at <code>${esc(X.code.head || "")}</code>${K.pypi_downloads ? "; pypistats.org" : ""}${K.hf_spaces_new ? "; Hugging Face Hub search" : ""}.</p>
+      <h3>Caveats</h3><p>${["stars_new", "pypi_downloads", "hf_spaces_new", "dependents", "backends_with_tests"].filter((k) => K[k]).map((k) => `<b>${esc(K[k].label)}</b>: ${esc(K[k].note || "—")}`).join("<br>")}</p></div>
+     <div class="card"><h3>Issue classifier</h3>${bk}
+      <h3>Narrative</h3><p>${esc(N.source || "none")}. ${(N.dropped || []).length} claims removed by the number check.</p>
+      <h3>Token report</h3><p>${esc(tb.summary || "—")}</p></div></div>`);
+  S("all-1", { kicker: "Appendix", title: "All indicators · community & flow", section: "Appendix", station: "KPIs 1" },
+    `<div class="cols2 grow">${[0, 1].map((h) => { const ks = M.families.flow; const mid = Math.ceil(ks.length / 2); return `<div class="card">${kpiTable(h ? ks.slice(mid) : ks.slice(0, mid))}</div>`; }).join("")}</div>`);
+  S("all-2", { kicker: "Appendix", title: "All indicators · adoption, codebase, themes", section: "Appendix", station: "KPIs 2" },
+    `<div class="cols2 grow"><div class="card"><h3>${famNames.adoption}</h3>${kpiTable(M.families.adoption)}<h3 style="margin-top:8px">${famNames.themes}</h3>${kpiTable(M.families.themes || [])}</div>
+     <div class="card"><h3>${famNames.code}</h3>${kpiTable(M.families.code)}</div></div>`);
+
+  // ---------- render: metro band, frame, footer
+  const LINES = [
+    { name: "Overview", color: "var(--ink-2)" }, { name: "Scorecard", color: "var(--s1)" }, { name: "Deep dives", color: "var(--s3)" },
+    { name: "Plan", color: "var(--s2)" }, { name: "Appendix", color: "var(--muted)" },
+  ].filter((l) => slides.some((s) => s.section === l.name));
+  const metro = (cur) => `<nav class="metro" aria-label="Presentation map">${LINES.map((l) => {
+    const st = slides.map((s, i) => ({ s, i })).filter(({ s }) => s.section === l.name);
+    const active = st.some(({ i }) => i === cur);
+    return `<div class="metro-line${active ? " active" : ""}" style="--c:${l.color};--n:${Math.max(2, st.length)}"><div class="metro-name">${esc(l.name)}</div><div class="metro-stops">${
+      st.map(({ s, i }) => `<button class="stop${i === cur ? " here" : i < cur ? " past" : ""}" data-goto="${s.id}" title="${esc(s.station)}"${i === cur ? ' aria-current="step"' : ""}><i></i><span>${esc(s.station)}</span></button>`).join("")
+    }</div></div>`; }).join("")}</nav>`;
+  const total = slides.length;
+  deck.innerHTML = slides.map((s, i) => `<section class="slide ${s.cls}" id="s-${s.id}" data-i="${i}" aria-roledescription="slide" aria-label="${i + 1} of ${total}">
+    ${s.section ? metro(i) : ""}
+    ${s.title ? `<header class="slide-head"><div class="kicker">${esc(s.kicker || "")}</div><h2>${esc(s.title)}</h2>${s.sowhat ? `<p class="sowhat">${esc(s.sowhat)}</p>` : ""}${cite(s.metrics)}</header>` : ""}
+    <div class="slide-body">${s.body}</div>
+    <footer class="slide-foot"><span>${esc(M.repo)} · pulse · ${esc(M.as_of)}</span><span>${i + 1} / ${total}</span></footer></section>`).join("");
+
+  // ---------- engine: one slide at a time, scaled 1280x720 canvas; scroll mode on narrow screens
+  const secs = [...deck.querySelectorAll(".slide")];
+  const pos = document.getElementById("pos");
+  const root = document.documentElement;
+  let cur = 0;
+  const idx = (id) => slides.findIndex((s) => s.id === id);
+  const narrow = () => matchMedia("(max-width: 760px)").matches;
+  function fit() {
+    const s = Math.min(window.innerWidth / 1280, (window.innerHeight - 0) / 720);
+    root.style.setProperty("--scale", s.toFixed(4));
+  }
+  function show(i, push = true) {
+    cur = Math.max(0, Math.min(total - 1, i));
+    secs.forEach((el, j) => { el.classList.toggle("active", j === cur); el.classList.toggle("before", j < cur); });
+    pos.textContent = `${cur + 1} / ${total}`;
+    if (narrow()) secs[cur].scrollIntoView({ block: "start" });
+    if (push) history.replaceState(null, "", `#${cur + 1}`);
+  }
+  const go = (i) => show(i);
+  document.getElementById("prev").onclick = () => go(cur - 1);
+  document.getElementById("next").onclick = () => go(cur + 1);
+  deck.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-goto]");
+    if (t) { e.preventDefault(); const i = idx(t.dataset.goto); if (i >= 0) { if (body.classList.contains("overview")) toggleOverview(false); go(i); } }
+  });
+  const body = document.body;
+  function toggleOverview(on = !body.classList.contains("overview")) {
+    body.classList.toggle("overview", on);
+    if (on) secs[cur].scrollIntoView({ block: "center" });
+  }
+  deck.addEventListener("click", (e) => {
+    if (!body.classList.contains("overview")) return;
+    const sl = e.target.closest(".slide");
+    if (sl) { toggleOverview(false); go(+sl.dataset.i); }
+  });
+  document.getElementById("ovBtn").onclick = () => toggleOverview();
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === "Home") go(0); else if (e.key === "End") go(total - 1);
+    else if (e.key === "o" || e.key === "O" || (e.key === "Escape" && body.classList.contains("overview"))) toggleOverview();
+  });
+  let tx = null;
+  deck.addEventListener("touchstart", (e) => { tx = e.touches[0].clientX; }, { passive: true });
+  deck.addEventListener("touchend", (e) => { if (tx === null || narrow()) return; const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 50) go(cur + (dx < 0 ? 1 : -1)); tx = null; });
+  // narrow screens scroll; keep the counter in sync
+  deck.addEventListener("scroll", () => { if (!narrow()) return; const y = deck.scrollTop + 40; let i = 0; secs.forEach((s, j) => { if (s.offsetTop <= y) i = j; }); if (i !== cur) { cur = i; pos.textContent = `${cur + 1} / ${total}`; } }, { passive: true });
+  window.addEventListener("resize", fit);
+  fit();
+  const start = parseInt((location.hash || "").slice(1), 10);
+  show(Number.isFinite(start) ? start - 1 : 0, false);
+  // overflow guard: content must fit the 1280x720 canvas
+  if (!narrow()) secs.forEach((el) => {
+    const was = el.classList.contains("active"); el.classList.add("active");
+    const b = el.querySelector(".slide-body");
+    if (b && b.scrollHeight > b.clientHeight + 2) console.warn(`[repo-pulse] overflow on slide ${el.id}: body +${b.scrollHeight - b.clientHeight}px`);
+    el.querySelectorAll(".card").forEach((c, k) => { if (c.scrollHeight > c.clientHeight + 2) console.warn(`[repo-pulse] overflow on slide ${el.id}: card ${k} +${c.scrollHeight - c.clientHeight}px`); });
+    if (!was) el.classList.remove("active");
+  });
+
+  let saved = null; try { saved = localStorage.getItem("repo-pulse-theme"); } catch (e) {}
+  if (saved) root.setAttribute("data-theme", saved);
+  document.getElementById("themeBtn").onclick = () => {
+    const dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = dark ? "light" : "dark"; root.setAttribute("data-theme", next);
+    try { localStorage.setItem("repo-pulse-theme", next); } catch (e) {}
+  };
+})();
+</script>
+</body>
+</html>

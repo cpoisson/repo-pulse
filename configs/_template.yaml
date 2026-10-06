@@ -1,0 +1,74 @@
+# repo-pulse config template — copy to configs/<name>.yaml, or run `uv run repo-pulse init owner/name` to get one with
+# the inferable fields (modules, pypi, critical_dependencies) pre-filled, then fill the rest using the notes below.
+# Keep this file free of machine-specific values (absolute paths, usernames): configs are committed and shared.
+# Fields marked (optional) can be deleted; the default applies.
+
+# --- Identity -------------------------------------------------------------------------------------------------------
+repo: OWNER/NAME                 # public GitHub repo
+title: NAME                      # shown on the deck title slide (optional, default: repo)
+pypi: PACKAGE_NAME               # PyPI distribution for adoption KPIs; null if not published
+window_days: 90                  # analysis window; compared with the window before it
+
+# (optional) Where the git clone lives. Default: $REPO_PULSE_CLONES/<owner>__<name>
+# (REPO_PULSE_CLONES defaults to ~/.cache/repo-pulse/clones and can be set in .env); `collect` clones it if missing.
+# Only set this to reuse an existing checkout, and prefer env vars over absolute paths, e.g. $HOME/src/NAME.
+# local_clone: $HOME/src/NAME
+
+# --- People ---------------------------------------------------------------------------------------------------------
+maintainers: []                  # GitHub logins; empty = users who merged a PR in the last 365 days
+bots: [dependabot, github-actions, Copilot, copilot-pull-request-reviewer]   # "*[bot]" logins are always bots
+
+# --- Code map -------------------------------------------------------------------------------------------------------
+# Path prefix -> module name; the longest matching prefix wins. Name the parts maintainers think in.
+# Used for churn, bus factor and the test-coverage proxy.
+modules:
+  src/PACKAGE/SUBPACKAGE: SUBPACKAGE
+  src/PACKAGE: core
+  tests: tests
+  docs: docs
+  README.md: docs
+  pyproject.toml: packaging
+  .github: ci
+
+# Coverage proxy: a module counts as tested if any test file name contains one of its keywords.
+module_test_keywords:
+  SUBPACKAGE: [subpackage]
+
+critical_dependencies: [torch, transformers]   # direct deps whose version lag / breakage is tracked
+ci_workflow: CI                  # (optional) Actions workflow for CI KPIs; default: most frequent on push
+star_history_svg: null           # (optional) repo-relative star-history SVG, fallback when the stargazers API is empty
+backend_registry: null           # (optional) plugin/backend registry: {path: <file>, pattern: <regex, 1 group = id>, label: <text>}
+
+known_incidents: []              # (optional) [{date: "YYYY-MM-DD", title: "...", refs: ["#123"]}]
+hf_hub_queries: []               # (optional) Hugging Face Hub search terms for downstream models/Spaces
+
+# --- Issue classification -------------------------------------------------------------------------------------------
+# Descriptions double as zero-shot label text: concrete, mutually exclusive, one sentence each.
+issue_types:
+  bug: Something is broken, crashes, errors, or behaves incorrectly.
+  enhancement: A request for a new feature, model, backend, or improvement.
+  question: A usage question, help request, or discussion without a concrete defect.
+
+# 8-13 themes proposed from the repo's own issues (see skills/repo-pulse/SKILL.md, step 2). Always keep `other`.
+themes:
+  THEME_KEY: One sentence describing which issues belong here.
+  other: Anything else (showcases, announcements, general questions).
+
+classifier: local                # local (free, default) | auto (best measured, incl. API models) | jev (force TypeSafe Jev)
+classifier_gate:                 # a classifier is only used if it passes; never loosen this to make a slide appear
+  min_macro_f1: 0.7
+  max_ece: 0.1
+  target_precision: 0.85
+
+# --- Status chips ---------------------------------------------------------------------------------------------------
+# metric -> green at `good`, red at `bad`; set lower_is_better when smaller is healthier.
+thresholds:
+  median_first_response_days: {good: 2, bad: 7, lower_is_better: true}
+  median_time_to_merge_days: {good: 3, bad: 14, lower_is_better: true}
+  pr_merge_rate: {good: 0.6, bad: 0.35}
+  external_pr_share: {good: 0.4, bad: 0.15}
+  stale_open_prs: {good: 5, bad: 20, lower_is_better: true}
+  open_issues_over_90d: {good: 20, bad: 60, lower_is_better: true}
+  ci_pass_rate_main: {good: 0.9, bad: 0.7}
+  bus_factor: {good: 3, bad: 1}
+  days_since_release: {good: 45, bad: 120, lower_is_better: true}
