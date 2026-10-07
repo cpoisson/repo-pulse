@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 BODY_CHARS = 1500
 
@@ -23,18 +24,21 @@ def gql(query: str, **variables) -> dict:
     return out["data"]
 
 
-def _paginate(query: str, path: list[str], owner: str, name: str, progress: str = "") -> list[dict]:
+def _paginate(query: str, path: list[str], owner: str, name: str, progress: str = "",
+              stop: Callable[[list[dict]], bool] | None = None) -> list[dict]:
+    """`stop(page_nodes)` ends paging early (for queries ordered newest first)."""
     nodes, cursor, page = [], None, 0
     while True:
         data = gql(query, owner=owner, name=name, cursor=cursor)
         conn = data
         for k in path:
             conn = conn[k]
-        nodes.extend(conn.get("nodes") or conn.get("edges") or [])
+        batch = conn.get("nodes") or conn.get("edges") or []
+        nodes.extend(batch)
         page += 1
         if progress:
             print(f"  {progress}: {len(nodes)}", file=sys.stderr, end="\r")
-        if not conn["pageInfo"]["hasNextPage"]:
+        if not conn["pageInfo"]["hasNextPage"] or (stop and stop(batch)):
             break
         cursor = conn["pageInfo"]["endCursor"]
     if progress:
@@ -49,14 +53,18 @@ query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:
    labels(first:10){nodes{name}}
    comments(first:30){totalCount nodes{author{login} authorAssociation createdAt}}}}}}"""
 
-_PRS = """
-query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
- pullRequests(first:25,after:$cursor,orderBy:{field:CREATED_AT,direction:ASC}){pageInfo{hasNextPage endCursor}
-  nodes{number title body state isDraft createdAt closedAt mergedAt updatedAt author{login} authorAssociation
+_PR_FIELDS = """number title body state isDraft createdAt closedAt mergedAt updatedAt author{login} authorAssociation
    mergedBy{login} additions deletions changedFiles labels(first:10){nodes{name}}
    files(first:100){nodes{path additions deletions}}
    comments(first:30){nodes{author{login} authorAssociation createdAt}}
-   reviews(first:30){nodes{author{login} authorAssociation submittedAt state}}}}}}"""
+   reviews(first:30){nodes{author{login} authorAssociation submittedAt state}}"""
+
+_PRS = """
+query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
+ pullRequests(first:25,after:$cursor,%s){pageInfo{hasNextPage endCursor} nodes{%s}}}}"""
+
+# Full history, cheap fields only: enough for first-contribution dates and who merged in the last year.
+_PR_LIGHT = """number title state isDraft createdAt closedAt mergedAt updatedAt author{login} authorAssociation mergedBy{login}"""
 
 _STARS = """
 query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
@@ -98,8 +106,26 @@ def issues(owner: str, name: str) -> list[dict]:
     return [_flatten(n) for n in _paginate(_ISSUES, ["repository", "issues"], owner, name, "issues")]
 
 
-def pulls(owner: str, name: str) -> list[dict]:
-    return [_flatten(n) for n in _paginate(_PRS, ["repository", "pullRequests"], owner, name, "pull requests")]
+def pulls(owner: str, name: str, since: datetime | None = None) -> list[dict]:
+    """With `since`, full detail (files, comments, reviews) only for PRs updated since then or still open;
+    older PRs come from a light pass so first-contribution and maintainer inference stay exact."""
+    path = ["repository", "pullRequests"]
+    if since is None:
+        return [_flatten(n) for n in _paginate(_PRS % ("orderBy:{field:CREATED_AT,direction:ASC}", _PR_FIELDS), path, owner, name, "pull requests")]
+    cutoff = since.isoformat()
+    recent = _paginate(_PRS % ("orderBy:{field:UPDATED_AT,direction:DESC}", _PR_FIELDS), path, owner, name, "recent pull requests",
+                       stop=lambda batch: bool(batch) and batch[-1]["updatedAt"] < cutoff)
+    detailed = {n["number"]: n for n in recent if n["updatedAt"] >= cutoff}
+    detailed.update({n["number"]: n for n in _paginate(_PRS % ("states:OPEN", _PR_FIELDS), path, owner, name, "open pull requests")})
+    light = _paginate(_PRS.replace("first:25", "first:100") % ("orderBy:{field:CREATED_AT,direction:ASC}", _PR_LIGHT), path, owner, name, "pull request history")
+    out = [_flatten(detailed.get(n["number"], n)) for n in light]
+    known = {n["number"] for n in light}
+    out += [_flatten(n) for num, n in detailed.items() if num not in known]   # opened during the light pass
+    for item in out:
+        item.setdefault("comments", [])
+        item.setdefault("reviews", [])
+        item.setdefault("labels", [])
+    return sorted(out, key=lambda p: p["createdAt"])
 
 
 def stars(owner: str, name: str, cap: int = 40000) -> list[str]:
