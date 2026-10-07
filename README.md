@@ -21,7 +21,8 @@ repo-pulse turns any public GitHub repository into a short slide deck for its ma
 
 See it on real projects: [TRL](https://charlespoisson.com/repo-pulse/examples/trl.html) ·
 [LeRobot](https://charlespoisson.com/repo-pulse/examples/lerobot.html) ·
-[speech-to-speech](https://charlespoisson.com/repo-pulse/examples/speech-to-speech.html).
+[speech-to-speech](https://charlespoisson.com/repo-pulse/examples/speech-to-speech.html) ·
+[Prysm](https://charlespoisson.com/repo-pulse/examples/prysm.html).
 
 ## How it works
 
