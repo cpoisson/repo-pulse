@@ -128,7 +128,7 @@ def main(argv=None):
     c.add_argument("--import", dest="import_reviewed", help="reviewed.json exported from the review page")
     c = sub.add_parser("bakeoff", help="compare classifiers on the gold set"); c.add_argument("--models", default=None)
     c.add_argument("--classifier", choices=modes, default=None, help="override config `classifier` (local skips API models)")
-    c = sub.add_parser("init", help="clone a public repo and write a starter config"); c.add_argument("repo", help="owner/name")
+    c = sub.add_parser("init", help="clone a public repo and write a starter config"); c.add_argument("repo", help="owner/name, or a github.com / gitlab.com URL")
     c.add_argument("--window", type=int, default=90)
     sub.add_parser("digest", help="print the compact metrics digest used to write the narrative")
     c = sub.add_parser("issues", help="print a compact issue list (for taxonomy / labelling)"); c.add_argument("--chars", type=int, default=300)

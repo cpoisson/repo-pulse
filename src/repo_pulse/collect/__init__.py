@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 from ..config import Config
-from . import git_local, github, hfhub, pypi
+from datetime import date, datetime, timedelta, timezone
+
+from . import git_local, github, gitlab, hfhub, pypi
 from .cache import ROOT, cached
 
 
@@ -36,17 +38,29 @@ def run(cfg: Config, as_of: str, refresh: bool = False) -> None:
         except Exception as e:  # one failing source must not sink the edition
             print(f"  ! {name} failed: {e}", file=sys.stderr)
 
-    step("repo", lambda: github.repo_meta(o, n))
-    step("issues", lambda: github.issues(o, n))
-    step("pulls", lambda: github.pulls(o, n))
-    step("stars", lambda: github.stars(o, n, cap=40000))
-    step("forks", lambda: github.forks(o, n))
-    step("ci_runs", lambda: github.ci_runs(o, n, lookback))
-    step("dependents", lambda: {"count": github.dependents_count(o, n)})
+    since = datetime.combine(date.fromisoformat(as_of) - timedelta(days=lookback), datetime.min.time(), timezone.utc)
+    if cfg.forge == "gitlab":
+        pid = gitlab.project_id(cfg.repo)
+        meta_fn = lambda: gitlab.repo_meta(pid)
+        step("repo", meta_fn)
+        step("issues", lambda: gitlab.issues(pid, since))
+        step("pulls", lambda: gitlab.merge_requests(pid, since, cfg.is_bot))
+        step("stars", lambda: gitlab.stars(pid))
+        step("forks", lambda: gitlab.forks(pid))
+        step("ci_runs", lambda: gitlab.pipelines(pid, since, cached(slug, as_of, "repo", meta_fn)["defaultBranchRef"]["name"]))
+    else:
+        meta_fn = lambda: github.repo_meta(o, n)
+        step("repo", meta_fn)
+        step("issues", lambda: github.issues(o, n))
+        step("pulls", lambda: github.pulls(o, n))
+        step("stars", lambda: github.stars(o, n, cap=40000))
+        step("forks", lambda: github.forks(o, n))
+        step("ci_runs", lambda: github.ci_runs(o, n, lookback))
+        step("dependents", lambda: {"count": github.dependents_count(o, n)})
     if not cfg.local_clone.exists():
         from ..init import clone
         try:
-            clone(cfg.repo, since_days=lookback + 30, dest=cfg.local_clone)
+            clone(cfg.repo, since_days=lookback + 30, dest=cfg.local_clone, url=cfg.web_url + ".git")
         except Exception as e:
             print(f"  ! clone failed, skipping git metrics: {e}", file=sys.stderr)
     if cfg.local_clone.exists():
@@ -54,7 +68,7 @@ def run(cfg: Config, as_of: str, refresh: bool = False) -> None:
         step("commits", lambda: git_local.commits(cfg.local_clone, 400))
         step("tree", lambda: git_local.tree(cfg.local_clone, registry_path=(cfg.backend_registry or {}).get("path")))
         if cfg.star_history_svg:
-            meta = cached(slug, as_of, "repo", lambda: github.repo_meta(o, n))
+            meta = cached(slug, as_of, "repo", meta_fn)
             step("star_history", lambda: git_local.star_history_from_svg(cfg.local_clone, cfg.star_history_svg, meta["createdAt"]))
     _snapshot(cfg, as_of)
     if cfg.pypi:

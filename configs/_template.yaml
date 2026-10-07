@@ -4,7 +4,8 @@
 # Fields marked (optional) can be deleted; the default applies.
 
 # --- Identity -------------------------------------------------------------------------------------------------------
-repo: OWNER/NAME                 # public GitHub repo
+repo: OWNER/NAME                 # public repo path on the forge (GitLab: group/subgroup/project is fine)
+forge: github                    # (optional) github (default) | gitlab (gitlab.com; GITLAB_TOKEN in .env raises rate limits)
 title: NAME                      # shown on the deck title slide (optional, default: repo)
 pypi: PACKAGE_NAME               # PyPI distribution for adoption KPIs; null if not published
 window_days: 90                  # analysis window; compared with the window before it
@@ -15,7 +16,7 @@ window_days: 90                  # analysis window; compared with the window bef
 # local_clone: $HOME/src/NAME
 
 # --- People ---------------------------------------------------------------------------------------------------------
-maintainers: []                  # GitHub logins; empty = users who merged a PR in the last 365 days
+maintainers: []                  # forge usernames; empty = users who merged a PR in the last 365 days
 bots: [dependabot, github-actions, Copilot, copilot-pull-request-reviewer]   # "*[bot]" logins are always bots
 
 # --- Code map -------------------------------------------------------------------------------------------------------

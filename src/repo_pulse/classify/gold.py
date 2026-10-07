@@ -90,7 +90,7 @@ def make_review_page(cfg: Config, as_of: str, n: int | None = None) -> Path:
         rows.append({"n": num, "title": it["title"], "text": issue_text(it, 900)[len(it["title"]) + 2:], "type": lab["type"],
                      "theme": lab["theme"], "reviewed": lab.get("reviewed", False)})
     page = _REVIEW_HTML.replace("__DATA__", json.dumps(rows)).replace("__TYPES__", json.dumps(cfg.issue_types)) \
-        .replace("__THEMES__", json.dumps(cfg.themes)).replace("__REPO__", html.escape(cfg.repo))
+        .replace("__THEMES__", json.dumps(cfg.themes)).replace("__REPO__", html.escape(cfg.repo)).replace("__URL__", html.escape(cfg.web_url))
     out = Path("out") / f"{cfg.name}-gold-review.html"
     out.parent.mkdir(exist_ok=True)
     out.write_text(page)
@@ -127,7 +127,7 @@ const opt=(o,v)=>Object.entries(o).map(([k,d])=>`<option value="${k}" title="${d
 function cur(r){return state[r.n]||{type:r.type,theme:r.theme,ok:r.reviewed}}
 function render(){const only=document.getElementById('onlyTodo').checked;
  document.getElementById('list').innerHTML=rows.filter(r=>!only||!cur(r).ok).map(r=>{const c=cur(r);return `<div class="card ${c.ok?'done':''}" id="c${r.n}">
- <div><span class="n">#${r.n}</span> <span class="t">${esc(r.title)}</span> <a target="_blank" href="https://github.com/__REPO__/issues/${r.n}">open</a></div>
+ <div><span class="n">#${r.n}</span> <span class="t">${esc(r.title)}</span> <a target="_blank" href="__URL__/issues/${r.n}">open</a></div>
  <div class="body">${esc(r.text)}</div><div class="row">type <select onchange="upd('${r.n}','type',this.value)">${opt(TYPES,c.type)}</select>
  theme <select onchange="upd('${r.n}','theme',this.value)">${opt(THEMES,c.theme)}</select>
  <label><input type="checkbox" ${c.ok?'checked':''} onchange="upd('${r.n}','ok',this.checked)"> ok</label></div></div>`}).join('');prog()}

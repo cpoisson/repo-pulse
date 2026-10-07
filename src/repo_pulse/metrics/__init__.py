@@ -17,7 +17,7 @@ FAMILIES = {"flow": flow, "adoption": adoption, "code": code, "themes": themes}
 def compute(cfg: Config, raw: dict, as_of: str) -> dict:
     w = Windows.of(as_of, cfg.window_days)
     out = {
-        "repo": cfg.repo, "title": cfg.title, "as_of": as_of, "window_days": cfg.window_days,
+        "repo": cfg.repo, "forge": cfg.forge_name, "title": cfg.title, "as_of": as_of, "window_days": cfg.window_days,
         "windows": {"cur": [w.cur[0].date().isoformat(), as_of], "prior": [w.prior[0].date().isoformat(), w.cur[0].date().isoformat()]},
         "kpis": {}, "context": {}, "charts": {}, "families": {},
     }

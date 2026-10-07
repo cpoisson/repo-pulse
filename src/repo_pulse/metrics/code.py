@@ -91,7 +91,7 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
     pr_c, _, npr = ci(w.cur, "pull_request")
     pr_p, _, _ = ci(w.prior, "pull_request")
     k += [
-        kpi("ci_pass_rate_main", f"CI pass rate on {branch}", main_c, main_p, "ratio", cfg.thresholds.get("ci_pass_rate_main"), note=f"n={n_c} runs", source="GitHub Actions"),
+        kpi("ci_pass_rate_main", f"CI pass rate on {branch}", main_c, main_p, "ratio", cfg.thresholds.get("ci_pass_rate_main"), note=f"n={n_c} runs", source="GitHub Actions" if cfg.forge == "github" else f"{cfg.forge_name} CI"),
         kpi("ci_pass_rate_pr", "CI pass rate on PRs", pr_c, pr_p, "ratio", note=f"n={npr} runs"),
         kpi("ci_median_minutes", f"Median CI duration ({branch})", dur_c, dur_p, "min", lower_is_better=True),
     ]

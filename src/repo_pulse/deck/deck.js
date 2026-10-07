@@ -170,7 +170,7 @@
      <h1 class="hero">${esc(N.headline || "Project health: last " + M.window_days + " days vs the " + M.window_days + " before")}</h1>
      <div class="title-strip">${(D.headline_kpis || []).filter((k) => K[k]).map((k) => `<div><b>${fmt(K[k].value, K[k].unit)}</b><span>${esc(K[k].label)}</span>${deltaHtml(K[k])}</div>`).join("")}</div>
      <p class="title-meta">Current window ${esc(M.windows.cur[0])} → ${esc(M.windows.cur[1])} vs prior ${esc(M.windows.prior[0])} → ${esc(M.windows.prior[1])}.
-     Numbers are computed from ${["GitHub", "git", K.pypi_downloads ? "PyPI" : "", K.hf_spaces_new ? "the HF Hub" : ""].filter(Boolean).join(", ")}; every narrative claim is checked against them.</p>
+     Numbers are computed from ${[M.forge || "GitHub", "git", K.pypi_downloads ? "PyPI" : "", K.hf_spaces_new ? "the HF Hub" : ""].filter(Boolean).join(", ")}; every narrative claim is checked against them.</p>
      ${D.note ? `<p class="title-meta"><b>${esc(D.note)}</b></p>` : ""}
      <p class="title-meta muted">Press → to start · O for overview · narrative: ${esc(N.source || "none")}</p></div>`);
 
@@ -234,7 +234,7 @@
   S("adoption", { kicker: "Deep dive · adoption & reach", title: T("adoption", "Adoption"), sowhat: ns("adoption").so_what, metrics: ns("adoption").metrics, section: "Deep dives", station: "Adoption" },
     `${tiles(["stars_new", "forks_new", "forks_active", "pypi_downloads", "days_since_release"])}
      <div class="cols3 grow"><div class="card"><h3>New stars per week ${/approx/.test(K.stars_new?.note || "") ? '<span class="pill">approx.</span>' : ""}</h3>${C.stars_weekly ? weeklyBars(C.stars_weekly, { name: "new stars", W: 420, h: 290 }) : '<p class="muted">no star history</p>'}
-       <p class="small muted">${esc(K.stars_new?.note || "From the GitHub stargazers API.")}</p></div>
+       <p class="small muted">${esc(K.stars_new?.note || `From the ${M.forge || "GitHub"} stargazers API.`)}</p></div>
      ${C.pypi_weekly ? `<div class="card"><h3>PyPI downloads per week</h3>${weeklyBars(C.pypi_weekly.filter((p) => p[0] >= M.windows.prior[0]), { name: "downloads", W: 420, h: 290 })}
        <p class="small muted">${esc(K.pypi_downloads?.note || "No mirrors.")}</p></div>` : `<div class="card"><h3>New forks per week</h3>${weeklyBars(C.forks_weekly, { name: "new forks", W: 420, h: 290 })}</div>`}
      <div class="card">${(C.pypi_system || []).length ? `<h3>Who downloads (this window)</h3><p class="small"><b>OS</b><br>${pct(C.pypi_system)}</p><p class="small"><b>Python</b><br>${pct(C.pypi_python_minor || [])}</p>` : ""}
@@ -309,7 +309,7 @@
     `<div class="cols2 grow small"><div class="card"><h3>Method</h3>
       <p>Current window = last ${M.window_days} days to ${esc(M.as_of)}; prior = the ${M.window_days} days before. Bots excluded; maintainers = people who merged a PR in the last year.
       Response times count the first comment or review by a maintainer on items opened by someone else.</p>
-      <h3>Sources</h3><p>GitHub via <code>gh</code> (issues, PRs, reviews, stars, forks, releases, Actions runs of <code>${esc(X.code.ci_workflow || "CI")}</code>); git clone at <code>${esc(X.code.head || "")}</code>${K.pypi_downloads ? "; pypistats.org" : ""}${K.hf_spaces_new ? "; Hugging Face Hub search" : ""}.</p>
+      <h3>Sources</h3><p>${M.forge === "GitLab" ? "GitLab REST API (issues, merge requests and their notes, stars, forks, releases, default-branch pipelines)" : `GitHub via <code>gh</code> (issues, PRs, reviews, stars, forks, releases, Actions runs of <code>${esc(X.code.ci_workflow || "CI")}</code>)`}; git clone at <code>${esc(X.code.head || "")}</code>${K.pypi_downloads ? "; pypistats.org" : ""}${K.hf_spaces_new ? "; Hugging Face Hub search" : ""}.</p>
       <h3>Caveats</h3><p>${["stars_new", "pypi_downloads", "hf_spaces_new", "dependents", "backends_with_tests"].filter((k) => K[k]).map((k) => `<b>${esc(K[k].label)}</b>: ${esc(K[k].note || "—")}`).join("<br>")}</p></div>
      <div class="card"><h3>Issue classifier</h3>${bk}
       <h3>Narrative</h3><p>${esc(N.source || "none")}. ${(N.dropped || []).length} claims removed by the number check.</p>

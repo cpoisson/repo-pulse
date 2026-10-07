@@ -5,7 +5,7 @@ description: Build an analytic executive-summary slide deck on the health of any
 
 # repo-pulse
 
-Turns a public GitHub repo into a self-contained 16:9 HTML deck (one file, offline, print-to-PDF ready) for its maintainers.
+Turns a public GitHub repo (or a gitlab.com project, `forge: gitlab`) into a self-contained 16:9 HTML deck (one file, offline, print-to-PDF ready) for its maintainers.
 The tool is the repository this skill ships in (github.com/cpoisson/repo-pulse); this file is the playbook for *running*
 an analysis. The skill may be installed on its own (for example with `npx skills add cpoisson/repo-pulse`), so the setup
 step below finds or clones the tool first. It works with any coding agent that can run shell commands and edit files: the steps that need judgment
@@ -43,7 +43,7 @@ in that checkout (`configs/`, `data/`, `out/`, all gitignored), so later edition
 
 ### 1. Init and collect
 ```bash
-uv run repo-pulse init owner/name            # clones to $REPO_PULSE_CLONES (default ~/.cache/repo-pulse/clones), writes configs/<name>.yaml
+uv run repo-pulse init owner/name            # or https://gitlab.com/group/project; clones to $REPO_PULSE_CLONES (default ~/.cache/repo-pulse/clones), writes configs/<name>.yaml
 uv run repo-pulse -c $C collect              # issues, PRs, reviews, stars, forks, releases, CI runs, git, PyPI
 ```
 Open the config and sanity-check it (`configs/_template.yaml` documents every field; keep machine-specific paths out): the `modules` map (prefix → module, longest prefix wins) should name the parts
@@ -138,3 +138,6 @@ or the gold set changes.
   labels (flagged provisional) and new issues stay unthemed. Gate results measure agreement with the gold labels — until a
   maintainer reviews them, that is agreement with the LLM pre-labeller, not ground truth.
 - Only issues are themed; PRs feed flow and contributor metrics.
+- GitLab (`forge: gitlab`): issues and MRs cover the lookback span plus everything open (each human author's earliest
+  earlier MR is added for new-contributor dates); CI is default-branch pipelines only; no close reason, watchers or
+  dependents. List the project's bot accounts in `bots:` (GitLab bots rarely end in `[bot]`).
