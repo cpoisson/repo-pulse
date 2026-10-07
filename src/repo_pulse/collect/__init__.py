@@ -52,7 +52,7 @@ def run(cfg: Config, as_of: str, refresh: bool = False) -> None:
         meta_fn = lambda: github.repo_meta(o, n)
         step("repo", meta_fn)
         step("issues", lambda: github.issues(o, n))
-        step("pulls", lambda: github.pulls(o, n))
+        step("pulls", lambda: github.pulls(o, n, since))
         step("stars", lambda: github.stars(o, n, cap=40000))
         step("forks", lambda: github.forks(o, n))
         step("ci_runs", lambda: github.ci_runs(o, n, lookback))
