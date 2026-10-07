@@ -1,4 +1,4 @@
-"""`repo-pulse init owner/name`: clone the repo (history limited to the analysis span) and write a starter config.
+"""`repo-pulse init owner/name` (or a github.com / gitlab.com URL): clone the repo (history limited to the analysis span) and write a starter config.
 
 Everything inferable is inferred (module map, test keywords, PyPI package, critical deps). The issue theme taxonomy
 is left empty on purpose: it should be proposed from the repo's own issues (see the skill), not guessed.
@@ -17,7 +17,7 @@ from pathlib import Path
 import requests
 import yaml
 
-from .config import default_clone
+from .config import FORGES, default_clone
 
 CODE_EXT = (".py", ".js", ".ts", ".tsx", ".rs", ".go", ".java", ".kt", ".swift", ".c", ".cc", ".cpp", ".h", ".rb", ".cs")
 SKIP_DIRS = {".github", "docs", "doc", "examples", "scripts", "archive", "assets", "benchmarks", "demo", "tests", "test", "notebooks"}
@@ -52,7 +52,18 @@ def _run(*args: str, cwd: Path | None = None) -> str:
     return subprocess.run(args, cwd=cwd, capture_output=True, text=True, check=True).stdout
 
 
-def clone(repo: str, since_days: int, dest: Path | None = None) -> Path:
+def parse_repo(arg: str) -> tuple[str, str]:
+    """'owner/name' (GitHub) or a forge URL -> (forge, repo path); GitLab paths may nest groups."""
+    m = re.match(r"^(?:https?://)?(?:www\.)?([\w.-]+\.\w+)/(.+?)(?:\.git)?/?$", arg.strip())
+    if not m:
+        return "github", arg.strip().strip("/")
+    forge = next((f for f, (_, host) in FORGES.items() if host == m.group(1).lower()), None)
+    if not forge:
+        raise ValueError(f"unsupported host {m.group(1)!r}; supported: {', '.join(h for _, h in FORGES.values())}")
+    return forge, m.group(2).split("/-/")[0]
+
+
+def clone(repo: str, since_days: int, dest: Path | None = None, url: str | None = None) -> Path:
     dest = dest or default_clone(repo)
     since = (date.today() - timedelta(days=since_days)).isoformat()
     if dest.exists():
@@ -60,7 +71,7 @@ def clone(repo: str, since_days: int, dest: Path | None = None) -> Path:
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
         print(f"cloning {repo} (history since {since})…", file=sys.stderr)
-        url = f"https://github.com/{repo}.git"
+        url = url or f"https://github.com/{repo}.git"
         r = subprocess.run(["git", "clone", "-q", "--no-checkout", f"--shallow-since={since}", url, str(dest)], capture_output=True)
         if r.returncode != 0:  # quiet repo: no commit in the window makes --shallow-since fail; keep the tip instead
             shutil.rmtree(dest, ignore_errors=True)
@@ -131,14 +142,16 @@ def python_meta(clone_dir: Path, ref: str, files: list[str], repo_name: str) -> 
 
 
 def init(repo: str, out_dir: str = "configs", window_days: int = 90) -> Path:
-    owner, name = repo.split("/")
-    dest = clone(repo, since_days=window_days * 2 + 60)
+    forge, repo = parse_repo(repo)
+    name = repo.rsplit("/", 1)[1]
+    dest = clone(repo, since_days=window_days * 2 + 60, url=f"https://{FORGES[forge][1]}/{repo}.git")
     ref = "origin/HEAD" if subprocess.run(["git", "-C", str(dest), "rev-parse", "-q", "--verify", "origin/HEAD"], capture_output=True).returncode == 0 else "HEAD"
     files = _run("git", "ls-tree", "-r", "--name-only", ref, cwd=dest).split("\n")
     mods = module_map(files)
     pypi, deps = python_meta(dest, ref, files, name)
     cfg = {
-        "repo": repo, "title": name, "pypi": pypi, **DEFAULTS, "window_days": window_days,
+        "repo": repo, **({"forge": forge} if forge != "github" else {}), "title": name, "pypi": pypi, **DEFAULTS,
+        "window_days": window_days, **({"bots": []} if forge != "github" else {}),
         "modules": mods,
         "module_test_keywords": {m: [m.lower().replace("-", "_")] for m in sorted(set(mods.values())) if m not in ("core", "tests", "docs", "ci", "packaging", "examples", "scripts", "demo")},
         "critical_dependencies": deps,

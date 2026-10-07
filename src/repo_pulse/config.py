@@ -20,6 +20,9 @@ def _clone_path(raw: str | None, repo: str, config_path: Path) -> Path:
     return p if p.is_absolute() else (config_path.parent.parent / p).resolve()
 
 
+FORGES = {"github": ("GitHub", "github.com"), "gitlab": ("GitLab", "gitlab.com")}
+
+
 @dataclass
 class Config:
     path: Path
@@ -43,14 +46,23 @@ class Config:
     ci_workflow: str | None = None           # Actions workflow name used for CI KPIs; default: most frequent on push
     backend_registry: dict | None = None     # optional {path, pattern}: regex with one group = backend id
     classifier: str = "local"                # local (free, default) | auto (best measured, incl. API) | jev (force Jev)
+    forge: str = "github"                    # github | gitlab (gitlab.com): where issues, PRs/MRs and CI come from
 
     @property
     def owner(self) -> str:
-        return self.repo.split("/")[0]
+        return self.repo.rsplit("/", 1)[0]   # GitLab namespaces can nest: group/subgroup/project
 
     @property
     def name(self) -> str:
-        return self.repo.split("/")[1]
+        return self.repo.rsplit("/", 1)[1]
+
+    @property
+    def forge_name(self) -> str:
+        return FORGES[self.forge][0]
+
+    @property
+    def web_url(self) -> str:
+        return f"https://{FORGES[self.forge][1]}/{self.repo}"
 
     @property
     def slug(self) -> str:
@@ -91,4 +103,12 @@ def load(path: str | Path) -> Config:
         ci_workflow=raw.get("ci_workflow"),
         backend_registry=raw.get("backend_registry"),
         classifier=str(raw.get("classifier") or "local"),
+        forge=_forge(raw.get("forge")),
     )
+
+
+def _forge(raw: str | None) -> str:
+    forge = str(raw or "github").lower()
+    if forge not in FORGES:
+        raise ValueError(f"forge must be one of {', '.join(FORGES)}, got {raw!r}")
+    return forge

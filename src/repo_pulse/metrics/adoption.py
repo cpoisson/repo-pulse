@@ -39,7 +39,7 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
         for d, c in sorted(Counter(starred).items()):
             n += c
             series.append([d, n])
-        hist = {"source": "GitHub stargazers API", "exact": True, "series": series}
+        hist = {"source": f"{cfg.forge_name} stargazers API", "exact": True, "series": series}
     else:
         hist = raw.get("star_history") or {}
     series = hist.get("series", [])
@@ -49,7 +49,7 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
     new_prior = round(s_cur_start - s_prior_start) if s_cur_start is not None and s_prior_start is not None else None
     star_note = "" if hist.get("exact") else (f"approx. — derived from {hist['source']}" if hist else "no star history available")
     k += [
-        kpi("stars_total", "GitHub stars (total)", stars_now, source="GitHub API"),
+        kpi("stars_total", f"{cfg.forge_name} stars (total)", stars_now, source=f"{cfg.forge_name} API"),
         kpi("stars_new", "New stars in window", new_cur, new_prior, note=star_note),
         kpi("stars_growth_rate", "Star growth vs window start", ratio(new_cur, s_cur_start) if new_cur is not None else None,
             ratio(new_prior, s_prior_start) if new_prior is not None and s_prior_start else None, "ratio", note=star_note),
@@ -118,9 +118,9 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
     rels = sorted(rels + pyrels, key=lambda r: r["publishedAt"], reverse=True)
     last = max((ts(r["publishedAt"]) for r in rels), default=None)
     k += [
-        kpi("releases", "Releases (GitHub or PyPI)", sum(within(ts(r["publishedAt"]), w.cur) for r in rels), sum(within(ts(r["publishedAt"]), w.prior) for r in rels)),
+        kpi("releases", f"Releases ({cfg.forge_name} or PyPI)", sum(within(ts(r["publishedAt"]), w.cur) for r in rels), sum(within(ts(r["publishedAt"]), w.prior) for r in rels)),
         kpi("days_since_release", "Days since last release", round(days(last, w.as_of)) if last else None, rule=cfg.thresholds.get("days_since_release")),
-        kpi("dependents", "GitHub dependents (Used by)", (raw.get("dependents") or {}).get("count"), note="best-effort scrape"),
+        kpi("dependents", "GitHub dependents (Used by)", (raw.get("dependents") or {}).get("count"), note="best-effort scrape" if cfg.forge == "github" else "GitHub only; not collected"),
     ]
     ctx["releases"] = [[r["tagName"], r["publishedAt"][:10]] for r in rels]
     snap = Path("data/history") / f"{cfg.slug}.jsonl"

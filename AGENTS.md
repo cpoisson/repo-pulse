@@ -8,7 +8,7 @@ This file is for agents changing **this codebase**. Two other entry points exist
 | Scheduled edition of an already-configured repo | `scripts/run-edition.sh` → prompt `tasks/edition.md` | an unattended agent (pi, codex, claude) |
 | Change the tool | this file | agents developing repo-pulse |
 
-repo-pulse turns a public GitHub repo into a self-contained 16:9 HTML deck for its maintainers: deterministic
+repo-pulse turns a public GitHub or GitLab repo into a self-contained 16:9 HTML deck for its maintainers: deterministic
 90-day-vs-prior metrics, a measured issue classifier, a number-checked narrative, and a prioritized improvement plan.
 
 ## Setup and checks
@@ -23,7 +23,7 @@ uv run repo-pulse --help
 all of `data/` are gitignored, so a fresh clone has no deck to rebuild. To get one, configure any small public repo:
 
 ```bash
-uv run repo-pulse init owner/name                    # writes configs/<name>.yaml; a repo with a few hundred issues takes ~1 min
+uv run repo-pulse init owner/name                    # or a gitlab.com URL; writes configs/<name>.yaml; a repo with a few hundred issues takes ~1 min
 C=configs/<name>.yaml
 uv run repo-pulse -c $C collect && uv run repo-pulse -c $C analyze && uv run repo-pulse -c $C narrate && uv run repo-pulse -c $C build
 uvx --with playwright python skills/repo-pulse/scripts/check_deck.py out/<name>-pulse-<date>.html
@@ -41,7 +41,7 @@ src/repo_pulse/
   cli.py           commands: init collect issues gold bakeoff classify analyze digest narrate build all
   config.py        Config dataclass; everything repo-specific comes from configs/<name>.yaml
   init.py          clone + infer module map / PyPI package / deps → starter config
-  collect/         github.py (gh GraphQL/REST), git_local.py, pypi.py, hfhub.py; cache.py = data/raw/<slug>/<date>/
+  collect/         github.py (gh GraphQL/REST), gitlab.py (REST + GraphQL notes, same record shapes), git_local.py, pypi.py, hfhub.py; cache.py = data/raw/<slug>/<date>/
   metrics/         flow, adoption, code, themes → metrics-<date>.json (kpi() records: key, label, value, prior, unit, status, direction)
   classify/        models.py (candidates), bakeoff.py (measure + decide), calibration.py, gold.py, run.py (production labels), report.py
   llm/             narrate.py (file > optional API > rules), validate.py (number grounding)
