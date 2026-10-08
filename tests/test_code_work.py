@@ -41,3 +41,14 @@ def test_changelog_sections_and_towncrier(tmp_path):
     git("add", "."); git("commit", "-q", "-m", "two")
     two, one = git("log", "--format=%H").split()
     assert changelog_entries(tmp_path, "changelog/", ref="HEAD") == {one: ["added", "fixed"], two: ["bugfix"]}
+
+
+def test_pr_type():
+    from repo_pulse.metrics.code import pr_type
+    code = {"files": [{"path": "beacon-chain/sync/a.go"}, {"path": "changelog/x.md"}]}
+    assert pr_type(code, path_kind, ["added", "fixed"]) == "feature"
+    assert pr_type(code, path_kind, ["removed"]) == "change"
+    assert pr_type(code, path_kind, ["ignored"]) == "internal"
+    assert pr_type(code, path_kind, None) == "untyped"
+    assert pr_type({"files": [{"path": "README.md"}, {"path": ".github/workflows/ci.yml"}]}, path_kind, ["added"]) == "no_code"
+    assert pr_type({"files": []}, path_kind, None) == "untyped"
