@@ -88,6 +88,12 @@ docs/              guide.md (user guide), adr/ (decision records), examples/ (an
 
 ## Conventions
 
+- English is the language of the repo and of its development: code, comments, docs, ADRs, commit messages, decks, and
+  the agent's replies while working on the tool, whatever language a request is written in.
+- Every evolution (feature, indicator change, data source, behaviour change) is tracked by a GitHub issue opened
+  before the work starts: the problem, the proposed change and how it will be checked. Commits and PRs reference it
+  (`Refs #N`, or `Closes #N` on the last one), and an ADR links the issue it came from. Trivial fixes (typos, a broken
+  test) don't need one.
 - Match the surrounding code: small pure functions, type hints, comments only where the *why* is not obvious.
 - Prefer the standard library and existing dependencies; justify any new one.
 - Commit messages describe the change; no agent attribution trailers or tool mentions.

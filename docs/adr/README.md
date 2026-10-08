@@ -12,6 +12,7 @@ the alternatives turned down and what follows from it. They explain *why* the co
 
 Add an ADR when a change alters the definition of an indicator, adds a data source, or turns down an obvious
 alternative someone will propose again.
+- Link the GitHub issue that tracks the change (every evolution has one, see `AGENTS.md`).
 - Copy the sections of an existing record: Status, Context, Decision, Alternatives considered, Consequences.
 - Number it sequentially and add it to the table above.
 - Keep it to one page.
