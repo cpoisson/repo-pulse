@@ -8,7 +8,7 @@ from pathlib import Path
 from ..config import Config
 from datetime import date, datetime, timedelta, timezone
 
-from . import git_local, github, gitlab, hfhub, pypi
+from . import distribution, git_local, github, gitlab, hfhub, pypi
 from .cache import ROOT, cached
 
 
@@ -22,8 +22,15 @@ def _snapshot(cfg: Config, as_of: str) -> None:
     hist.parent.mkdir(parents=True, exist_ok=True)
     rows = [json.loads(l) for l in hist.read_text().splitlines()] if hist.exists() else []
     rows = [r for r in rows if r["date"] != as_of]
-    rows.append({"date": as_of, "stars": m["stargazerCount"], "forks": m["forkCount"], "watchers": m["watchers"]["totalCount"],
-                 "open_issues": m["issues"]["totalCount"], "open_prs": m["pullRequests"]["totalCount"]})
+    row = {"date": as_of, "stars": m["stargazerCount"], "forks": m["forkCount"], "watchers": m["watchers"]["totalCount"],
+           "open_issues": m["issues"]["totalCount"], "open_prs": m["pullRequests"]["totalCount"]}
+    # download totals without published history: kept here so later editions get exact window deltas
+    raw_dir = ROOT / cfg.slug / as_of
+    if (raw_dir / "docker.json").exists():
+        row["docker_pulls"] = json.loads((raw_dir / "docker.json").read_text())
+    if (raw_dir / "release_assets.json").exists():
+        row["release_downloads"] = distribution.release_download_total(json.loads((raw_dir / "release_assets.json").read_text()))
+    rows.append(row)
     hist.write_text("\n".join(json.dumps(r) for r in sorted(rows, key=lambda r: r["date"])) + "\n")
 
 
@@ -70,6 +77,15 @@ def run(cfg: Config, as_of: str, refresh: bool = False) -> None:
         if cfg.star_history_svg:
             meta = cached(slug, as_of, "repo", meta_fn)
             step("star_history", lambda: git_local.star_history_from_svg(cfg.local_clone, cfg.star_history_svg, meta["createdAt"]))
+    channels = lambda t: [d["name"] for d in cfg.distribution if d["type"] == t]
+    if channels("npm"):
+        step("npm", lambda: {p: distribution.npm_downloads(p, lookback) for p in channels("npm")})
+    if channels("crates"):
+        step("crates", lambda: {c: distribution.crates_downloads(c) for c in channels("crates")})
+    if channels("docker"):
+        step("docker", lambda: {r: distribution.docker_pulls(r) for r in channels("docker")})
+    if any(d["type"] == "github_releases" for d in cfg.distribution) and cfg.forge == "github":
+        step("release_assets", lambda: distribution.github_release_assets(o, n))
     _snapshot(cfg, as_of)
     if cfg.pypi:
         step("pypi", lambda: pypi.downloads(cfg.pypi))

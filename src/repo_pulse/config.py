@@ -21,6 +21,8 @@ def _clone_path(raw: str | None, repo: str, config_path: Path) -> Path:
 
 
 FORGES = {"github": ("GitHub", "github.com"), "gitlab": ("GitLab", "gitlab.com")}
+# Distribution channels with public download counts; `name` is the package/image (github_releases needs none).
+CHANNELS = {"pypi": "PyPI", "npm": "npm", "crates": "crates.io", "docker": "Docker Hub", "github_releases": "GitHub release assets"}
 
 
 @dataclass
@@ -47,6 +49,7 @@ class Config:
     backend_registry: dict | None = None     # optional {path, pattern}: regex with one group = backend id
     classifier: str = "local"                # local (free, default) | auto (best measured, incl. API) | jev (force Jev)
     forge: str = "github"                    # github | gitlab (gitlab.com): where issues, PRs/MRs and CI come from
+    distribution: list[dict] = field(default_factory=list)   # [{type, name}] channels users install from (CHANNELS)
 
     @property
     def owner(self) -> str:
@@ -81,12 +84,13 @@ class Config:
 def load(path: str | Path) -> Config:
     path = Path(path).resolve()
     raw = yaml.safe_load(path.read_text())
+    dist = _distribution(raw)
     return Config(
         path=path,
         repo=raw["repo"],
         title=raw.get("title", raw["repo"]),
         local_clone=_clone_path(raw.get("local_clone"), raw["repo"], path),
-        pypi=raw.get("pypi"),
+        pypi=raw.get("pypi") or next((d["name"] for d in dist if d["type"] == "pypi"), None),
         window_days=int(raw.get("window_days", 90)),
         maintainers=raw.get("maintainers") or [],
         bots=raw.get("bots") or [],
@@ -104,7 +108,21 @@ def load(path: str | Path) -> Config:
         backend_registry=raw.get("backend_registry"),
         classifier=str(raw.get("classifier") or "local"),
         forge=_forge(raw.get("forge")),
+        distribution=dist,
     )
+
+
+def _distribution(raw: dict) -> list[dict]:
+    """`distribution` entries, plus the legacy top-level `pypi:` shorthand as a PyPI channel."""
+    dist = [dict(d) for d in raw.get("distribution") or []]
+    for d in dist:
+        if d.get("type") not in CHANNELS:
+            raise ValueError(f"distribution type must be one of {', '.join(CHANNELS)}, got {d.get('type')!r}")
+        if d["type"] != "github_releases" and not d.get("name"):
+            raise ValueError(f"distribution entry {d} needs a name")
+    if raw.get("pypi") and not any(d["type"] == "pypi" for d in dist):
+        dist.insert(0, {"type": "pypi", "name": raw["pypi"]})
+    return dist
 
 
 def _forge(raw: str | None) -> str:

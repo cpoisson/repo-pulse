@@ -47,7 +47,9 @@ uv run repo-pulse init owner/name            # or https://gitlab.com/group/proje
 uv run repo-pulse -c $C collect              # issues, PRs, reviews, stars, forks, releases, CI runs, git, PyPI
 ```
 Open the config and sanity-check it (`configs/_template.yaml` documents every field; keep machine-specific paths out): the `modules` map (prefix → module, longest prefix wins) should name the parts
-maintainers think in; set `ci_workflow` if the repo has several push workflows; add `known_incidents` you learn about;
+maintainers think in; check `distribution` lists the channels users actually install from (PyPI, npm, crates.io, Docker
+Hub images, GitHub release binaries; `init` infers them but cannot see images pushed from outside the repo, and registries
+such as gcr.io or the Go proxy publish no counts); set `ci_workflow` if the repo has several push workflows; add `known_incidents` you learn about;
 `backend_registry` (`path`, regex `pattern` with one group, `label`) only if the project has a plugin/backend registry.
 If a collector fails the run continues — note what is missing rather than inventing it.
 
@@ -128,10 +130,13 @@ or the gold set changes.
 ## Known limits
 
 - Code-health metrics (test/source LOC) are Python-centric; for Rust/JS-heavy repos say so rather than reading much into them.
-- Stars: the stargazer list often comes back empty with a `gh` user token (seen on every repo tested in 2026-10), so
-  "new stars" is usually blank on a first edition; exact star snapshots accumulate in `data/history/` from then on.
+- Stars: GitHub no longer lists stargazers (404 with a token, 401 without, for every repo as of 2026-10), and GH Archive
+  star events collapsed in 2026, so "new stars" is blank on a first edition; exact snapshots accumulate in
+  `data/history/` and give exact window counts once one predates the window. The same applies to Docker Hub pulls and
+  release-binary downloads, which only publish totals.
   For repos that commit their own star-history SVG, set `star_history_svg` to decode an approximate trend.
 - Releases count GitHub Releases and PyPI uploads (many projects only tag + publish to PyPI).
+- Download KPIs appear only for configured `distribution` channels; a project with none shows no download figure.
 - Quiet repos are a valid result: empty windows render as "nothing in this window", and the narrative should say
   plainly that activity stopped (and ask whether the project is maintained) rather than hunting for a trend.
 - Without Jev, local theme classifiers miss the gate at ~150–280 gold issues and 12–13 themes; the deck then uses gold

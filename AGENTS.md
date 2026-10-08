@@ -41,7 +41,7 @@ src/repo_pulse/
   cli.py           commands: init collect issues gold bakeoff classify analyze digest narrate build all
   config.py        Config dataclass; everything repo-specific comes from configs/<name>.yaml
   init.py          clone + infer module map / PyPI package / deps → starter config
-  collect/         github.py (gh GraphQL/REST), gitlab.py (REST + GraphQL notes, same record shapes), git_local.py, pypi.py, hfhub.py; cache.py = data/raw/<slug>/<date>/
+  collect/         github.py (gh GraphQL/REST), gitlab.py (REST + GraphQL notes, same record shapes), git_local.py, pypi.py, distribution.py (npm, crates.io, Docker Hub, release assets), hfhub.py; cache.py = data/raw/<slug>/<date>/
   metrics/         flow, adoption, code, themes → metrics-<date>.json (kpi() records: key, label, value, prior, unit, status, direction)
   classify/        models.py (candidates), bakeoff.py (measure + decide), calibration.py, gold.py, run.py (production labels), report.py
   llm/             narrate.py (file > optional API > rules), validate.py (number grounding)
