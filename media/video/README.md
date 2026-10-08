@@ -4,7 +4,7 @@ Remotion project (same version as `inside-s2s`). Everything is generated from so
 
 ```bash
 cd media/video && npm install
-uvx --with playwright python scripts/capture.py          # 2x slide screenshots from the anonymized docs/examples/ decks -> public/slides/
+uvx --with playwright python scripts/capture.py          # 2x slide screenshots from the docs/examples/ decks -> public/slides/
 (cd ../.. && uv run python media/video/scripts/music_styles.py --style video --seconds 72 --out media/video/public/music.wav)  # arranged track
 npx remotion studio src/index.ts                           # preview
 npx remotion render src/index.ts RepoPulse out/repo-pulse.mp4 --codec=h264 --crf=18 --audio-codec=aac

@@ -29,7 +29,7 @@ uv run repo-pulse -c $C collect && uv run repo-pulse -c $C analyze && uv run rep
 uvx --with playwright python skills/repo-pulse/scripts/check_deck.py out/<name>-pulse-<date>.html
 ```
 
-`docs/examples/` holds published example decks built with `build --anonymize`; never commit a non-anonymized deck there.
+`docs/examples/` holds the published example decks (`build --out docs/examples/<name>.html`).
 Video and GIF slides are captured only from those decks (`media/video/scripts/capture.py`), never from `out/`.
 After any change to `src/repo_pulse/deck/`, run `check_deck.py` on every deck you can build; it must report 0 issues
 (no overflow, no JS errors, no horizontal scroll on phones).
@@ -49,7 +49,7 @@ src/repo_pulse/
 configs/           _template.yaml (documents every field); per-repo configs are local and gitignored
 data/<owner>__<name>/  local (gitignored) decision artifacts: gold.json, bakeoff.json, classifier.json, metrics, narrative inputs
 skills/repo-pulse/ the run playbook (SKILL.md), narrative reference, deck checker
-docs/              guide.md (user guide), adr/ (decision records), examples/ (anonymized decks)
+docs/              guide.md (user guide), adr/ (decision records), examples/ (published example decks)
 ```
 
 ## Invariants — do not break these
