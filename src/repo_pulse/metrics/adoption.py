@@ -1,4 +1,4 @@
-"""Adoption & reach: stars, forks, PyPI, HF Hub, releases."""
+"""Adoption & reach: stars, forks, downloads per distribution channel, HF Hub, releases."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,8 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ..config import Config
+from ..collect.distribution import is_binary_asset
+from ..config import CHANNELS, Config
 from .util import Windows, days, kpi, ratio, ts, weekly, within
 
 
@@ -27,6 +28,34 @@ def _stars_at(series: list[list], when: datetime) -> float | None:
     x0, x1 = xs[i - 1], xs[i]
     y0, y1 = series[i - 1][1], series[i][1]
     return y0 + (y1 - y0) * ((t - x0) / (x1 - x0) if x1 > x0 else 1)
+
+
+def _daily(by_day: dict[str, int], w: Windows) -> tuple[int | None, int | None, str, list]:
+    """Window sums over a {date: downloads} series, a coverage note, and complete weeks for the chart."""
+    if not by_day:
+        return None, None, "", []
+    first_day, last_day = min(by_day), max(by_day)
+    day = lambda d: datetime.fromisoformat(d).replace(tzinfo=timezone.utc)
+    covered = lambda win: day(first_day) <= win[0] + timedelta(days=1)
+    total = lambda win: sum(v for d, v in by_day.items() if within(day(d), win))
+    wkly = defaultdict(int)
+    for d, v in by_day.items():
+        t = datetime.fromisoformat(d)
+        wkly[(t - timedelta(days=t.weekday())).date().isoformat()] += v
+    complete = lambda wk: (datetime.fromisoformat(wk) + timedelta(days=6)).date().isoformat() <= last_day
+    weeks = sorted([k_, v] for k_, v in wkly.items() if complete(k_) and k_ >= w.prior[0].date().isoformat())
+    note = "" if covered(w.prior) else f"prior window only partly covered (data starts {first_day})"
+    return total(w.cur) if covered(w.cur) else None, total(w.prior) if covered(w.prior) else None, note, weeks
+
+
+def _snapshot_window(rows: list[dict], value, w: Windows) -> tuple[int | None, int | None, str | None]:
+    """Exact window deltas of a cumulative counter from edition snapshots; None until one predates the window."""
+    pts = [(datetime.fromisoformat(r["date"]).replace(tzinfo=timezone.utc), v) for r in rows if (v := value(r)) is not None]
+    at = lambda when: next((v for d, v in reversed(pts) if d <= when), None)
+    now, cur0, prior0 = at(w.as_of), at(w.cur[0]), at(w.prior[0])
+    first = pts[0][0].date().isoformat() if pts else None
+    return (now - cur0 if now is not None and cur0 is not None else None,
+            cur0 - prior0 if cur0 is not None and prior0 is not None else None, first)
 
 
 def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]:
@@ -77,34 +106,69 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
     ]
     charts["forks_weekly"] = weekly([ts(f["createdAt"]) for f in forks], w.prior[0], w.as_of)
 
-    pypi = raw.get("pypi") or {}
-    overall = [r for r in pypi.get("overall", []) if r.get("category") == "without_mirrors"]
-    by_day = {r["date"]: r["downloads"] for r in overall}
-    first_day = min(by_day) if by_day else None
+    snap = Path("data/history") / f"{cfg.slug}.jsonl"
+    rows = [json.loads(l) for l in snap.read_text().splitlines()] if snap.exists() else []
+    download_keys, sources, weekly_charts = [], [], []
+    for d in cfg.distribution:
+        typ = d["type"]
+        if typ in ("pypi", "npm", "crates") and any(x["type"] == typ for x in cfg.distribution[:cfg.distribution.index(d)]):
+            continue  # one KPI per daily channel type; extra packages are summed below
+        if typ not in ("pypi", "npm", "crates"):
+            continue  # totals-only channels are handled below
+        names = [x["name"] for x in cfg.distribution if x["type"] == typ]
+        if typ == "pypi":
+            by_day = {r["date"]: r["downloads"] for r in (raw.get("pypi") or {}).get("overall", []) if r.get("category") == "without_mirrors"}
+            key, label, src = "pypi_downloads", "PyPI downloads (no mirrors)", "pypistats.org"
+        elif typ in ("npm", "crates"):
+            by_day = defaultdict(int)
+            for series in (raw.get(typ) or {}).values():
+                for day_, v in series.items():
+                    by_day[day_] += v
+            key, label, src = f"{typ}_downloads", f"{CHANNELS[typ]} downloads", "api.npmjs.org" if typ == "npm" else "crates.io"
+        cur, prior, note, weeks = _daily(dict(by_day), w)
+        if len(names) > 1:
+            note = "; ".join(x for x in (f"sum of {', '.join(names)}", note) if x)
+        k.append(kpi(key, label, cur, prior, note=note or ("" if by_day else "no download data collected"), source=src))
+        download_keys.append(key); sources.append(src)
+        if weeks:
+            weekly_charts.append({"name": label, "points": weeks})
+    if cfg.pypi:  # kept for the "who downloads" breakdown on the adoption slide
+        for kind in ("system", "python_minor"):
+            agg = defaultdict(int)
+            for r in (raw.get("pypi") or {}).get(kind, []):
+                if within(datetime.fromisoformat(r["date"]).replace(tzinfo=timezone.utc), w.cur):
+                    agg[r["category"]] += r["downloads"]
+            charts[f"pypi_{kind}"] = sorted(agg.items(), key=lambda x: -x[1])
+    if weekly_charts:
+        charts["downloads_weekly"] = weekly_charts[0]
 
-    def dl(win):
-        s = sum(v for d, v in by_day.items() if within(datetime.fromisoformat(d).replace(tzinfo=timezone.utc), win))
-        covered = first_day is not None and datetime.fromisoformat(first_day).replace(tzinfo=timezone.utc) <= win[0] + timedelta(days=1)
-        return s, covered
-
-    dc, cov_c = dl(w.cur)
-    dp, cov_p = dl(w.prior)
-    k += [kpi("pypi_downloads", "PyPI downloads (no mirrors)", dc if by_day else None, dp if cov_p else None,
-              note="" if cov_p else f"prior window only partly covered (pypistats data starts {first_day})", source="pypistats.org")]
-    if by_day:
-        wkly = defaultdict(int)
-        for d, v in by_day.items():
-            t = datetime.fromisoformat(d)
-            wkly[(t - timedelta(days=t.weekday())).date().isoformat()] += v
-        last_day = max(by_day)
-        complete = lambda wk: (datetime.fromisoformat(wk) + timedelta(days=6)).date().isoformat() <= last_day
-        charts["pypi_weekly"] = sorted([k_, v] for k_, v in wkly.items() if complete(k_))
-    for kind in ("system", "python_minor"):
-        agg = defaultdict(int)
-        for r in pypi.get(kind, []):
-            if within(datetime.fromisoformat(r["date"]).replace(tzinfo=timezone.utc), w.cur):
-                agg[r["category"]] += r["downloads"]
-        charts[f"pypi_{kind}"] = sorted(agg.items(), key=lambda x: -x[1])
+    docker_repos = [d["name"] for d in cfg.distribution if d["type"] == "docker"]
+    if docker_repos:
+        pulls = raw.get("docker") or {}
+        total = sum(v for v in pulls.values() if v) if pulls else None
+        cur, prior, first = _snapshot_window(rows, lambda r: sum((r.get("docker_pulls") or {}).values()) if r.get("docker_pulls") else None, w)
+        k += [kpi("docker_pulls", "Docker Hub pulls in window", cur, prior, source="hub.docker.com",
+                  note=f"{', '.join(docker_repos)}; window counts start once a snapshot predates the window (first: {first})" if cur is None else ", ".join(docker_repos)),
+              kpi("docker_pulls_total", "Docker Hub pulls (all time)", total, source="hub.docker.com", note=", ".join(f"{r_} {v:,}" for r_, v in pulls.items() if v))]
+        download_keys += ["docker_pulls", "docker_pulls_total"]; sources.append("Docker Hub")
+    if any(d["type"] == "github_releases" for d in cfg.distribution) and raw.get("release_assets") is not None:
+        rel_assets = raw["release_assets"]
+        per_release = [[r_["tag"], (r_["publishedAt"] or "")[:10], sum(a["downloads"] for a in r_["assets"] if is_binary_asset(a["name"]))]
+                       for r_ in rel_assets if r_["publishedAt"] and not r_["prerelease"]]
+        cur, prior, first = _snapshot_window(rows, lambda r: r.get("release_downloads"), w)
+        if cur is not None:
+            k.append(kpi("release_downloads", "Release binary downloads in window", cur, prior, source="GitHub release assets",
+                         note="checksums and signatures excluded"))
+        else:
+            in_win = [n_ for _, d_, n_ in per_release if within(datetime.fromisoformat(d_).replace(tzinfo=timezone.utc), w.cur)]
+            k.append(kpi("release_downloads", "Release binary downloads", sum(in_win) if in_win else 0,
+                         source="GitHub release assets",
+                         note=f"to date, from the {len(in_win)} releases published in this window; checksums and signatures excluded; "
+                              f"exact window counts once a snapshot predates the window (first: {first})"))
+        ctx["release_downloads"] = per_release[:8]
+        download_keys.append("release_downloads"); sources.append("GitHub release assets")
+    ctx["download_keys"] = download_keys
+    ctx["distribution_sources"] = sources
 
     hub = raw.get("hfhub") or {}
     sp = hub.get("spaces", [])
@@ -118,11 +182,10 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
     rels = sorted(rels + pyrels, key=lambda r: r["publishedAt"], reverse=True)
     last = max((ts(r["publishedAt"]) for r in rels), default=None)
     k += [
-        kpi("releases", f"Releases ({cfg.forge_name} or PyPI)", sum(within(ts(r["publishedAt"]), w.cur) for r in rels), sum(within(ts(r["publishedAt"]), w.prior) for r in rels)),
+        kpi("releases", f"Releases ({cfg.forge_name}{' or PyPI' if cfg.pypi else ''})", sum(within(ts(r["publishedAt"]), w.cur) for r in rels), sum(within(ts(r["publishedAt"]), w.prior) for r in rels)),
         kpi("days_since_release", "Days since last release", round(days(last, w.as_of)) if last else None, rule=cfg.thresholds.get("days_since_release")),
         kpi("dependents", "GitHub dependents (Used by)", (raw.get("dependents") or {}).get("count"), note="best-effort scrape" if cfg.forge == "github" else "GitHub only; not collected"),
     ]
     ctx["releases"] = [[r["tagName"], r["publishedAt"][:10]] for r in rels]
-    snap = Path("data/history") / f"{cfg.slug}.jsonl"
-    ctx["snapshots"] = [json.loads(l) for l in snap.read_text().splitlines()] if snap.exists() else []
+    ctx["snapshots"] = rows
     return k, ctx, charts

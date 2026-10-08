@@ -5,6 +5,7 @@ is left empty on purpose: it should be proposed from the repo's own issues (see 
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -141,6 +142,50 @@ def python_meta(clone_dir: Path, ref: str, files: list[str], repo_name: str) -> 
     return name, list(dict.fromkeys(ranked))[:8]
 
 
+DOCKER_REF = re.compile(r"(?:docker\.io/|hub\.docker\.com/r/|docker (?:pull|run)(?: [-\w=]+)* )([a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*)")
+
+
+def _exists(url: str, **kw) -> bool:
+    try:
+        return requests.get(url, timeout=20, headers={"User-Agent": "repo-pulse"}, **kw).ok
+    except requests.RequestException:
+        return False
+
+
+def distribution(clone_dir: Path, ref: str, files: list[str], repo: str, forge: str, pypi: str | None) -> list[dict]:
+    """Channels with public download counts that this repo ships through, each checked against its registry."""
+    show = lambda f: subprocess.run(["git", "show", f"{ref}:{f}"], cwd=clone_dir, capture_output=True, text=True).stdout
+    out = [{"type": "pypi", "name": pypi}] if pypi else []
+    if "package.json" in files:
+        try:
+            pkg = json.loads(show("package.json"))
+            if pkg.get("name") and not pkg.get("private") and _exists(f"https://registry.npmjs.org/{pkg['name']}"):
+                out.append({"type": "npm", "name": pkg["name"]})
+        except ValueError:
+            pass
+    for f in sorted((f for f in files if f.endswith("Cargo.toml") and f.count("/") <= 1), key=lambda f: f.count("/")):
+        try:
+            name = tomllib.loads(show(f)).get("package", {}).get("name")
+        except Exception:
+            continue
+        if name and _exists(f"https://crates.io/api/v1/crates/{name}"):
+            out.append({"type": "crates", "name": name})
+            break
+    # Docker Hub images the repo itself tells users to pull, plus <owner>/<name>
+    docs = [f for f in files if f.lower().endswith((".md", ".sh", ".yml", ".yaml")) and f.count("/") <= 2][:300]
+    refs = Counter(m.lower() for f in docs for m in DOCKER_REF.findall(show(f)))
+    candidates = [r for r, _ in refs.most_common(8)] + [repo.lower()]
+    for img in dict.fromkeys(candidates):
+        r = requests.get(f"https://hub.docker.com/v2/repositories/{img}/", timeout=20)
+        if r.ok and (r.json().get("pull_count") or 0) > 0:
+            out.append({"type": "docker", "name": img})
+    if forge == "github":
+        rels = subprocess.run(["gh", "api", f"repos/{repo}/releases?per_page=10"], capture_output=True, text=True)
+        if rels.returncode == 0 and any(r.get("assets") for r in json.loads(rels.stdout or "[]")):
+            out.append({"type": "github_releases"})
+    return out[:6]
+
+
 def init(repo: str, out_dir: str = "configs", window_days: int = 90) -> Path:
     forge, repo = parse_repo(repo)
     name = repo.rsplit("/", 1)[1]
@@ -150,7 +195,8 @@ def init(repo: str, out_dir: str = "configs", window_days: int = 90) -> Path:
     mods = module_map(files)
     pypi, deps = python_meta(dest, ref, files, name)
     cfg = {
-        "repo": repo, **({"forge": forge} if forge != "github" else {}), "title": name, "pypi": pypi, **DEFAULTS,
+        "repo": repo, **({"forge": forge} if forge != "github" else {}), "title": name,
+        "distribution": distribution(dest, ref, files, repo, forge, pypi), **DEFAULTS,
         "window_days": window_days, **({"bots": []} if forge != "github" else {}),
         "modules": mods,
         "module_test_keywords": {m: [m.lower().replace("-", "_")] for m in sorted(set(mods.values())) if m not in ("core", "tests", "docs", "ci", "packaging", "examples", "scripts", "demo")},

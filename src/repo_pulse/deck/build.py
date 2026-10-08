@@ -16,7 +16,8 @@ SCORECARD = [
         "Contributions": ["external_pr_share", "new_contributors", "pr_merge_rate", "external_pr_merge_rate",
                           "median_time_to_merge_external_days", "top_merger_share"]}},
     {"id": "adoption", "title": "Adoption & reach", "tables": {
-        "Reach": ["stars_new", "forks_new", "forks_active", "pypi_downloads"],
+        "Reach": ["stars_new", "forks_new", "forks_active", "pypi_downloads", "npm_downloads", "crates_downloads",
+                  "release_downloads", "docker_pulls", "docker_pulls_total"],
         "Releases": ["releases", "days_since_release"]}},
     {"id": "code", "title": "Codebase, quality & issue themes", "tables": {
         "Ownership & quality": ["bus_factor", "top_committer_share", "modules_single_owner", "ci_pass_rate_main", "ci_pass_rate_pr",
@@ -25,7 +26,7 @@ SCORECARD = [
 ]
 # First five with data are shown on the title and summary slides.
 HEADLINE_KPIS = ["stars_new", "issues_opened", "prs_merged", "response_within_7d", "bus_factor",
-                 "pypi_downloads", "forks_new", "open_issues_over_90d", "stale_open_prs", "pr_contributors"]
+                 "pypi_downloads", "npm_downloads", "crates_downloads", "release_downloads", "forks_new", "open_issues_over_90d", "stale_open_prs", "pr_contributors"]
 
 
 def _token_report(base: Path, narr: dict) -> dict:

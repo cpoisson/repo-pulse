@@ -1,5 +1,5 @@
 # repo-pulse config template — copy to configs/<name>.yaml, or run `uv run repo-pulse init owner/name` to get one with
-# the inferable fields (modules, pypi, critical_dependencies) pre-filled, then fill the rest using the notes below.
+# the inferable fields (modules, distribution, critical_dependencies) pre-filled, then fill the rest using the notes below.
 # Keep this file free of machine-specific values (absolute paths, usernames): configs are committed and shared.
 # Fields marked (optional) can be deleted; the default applies.
 
@@ -7,7 +7,17 @@
 repo: OWNER/NAME                 # public repo path on the forge (GitLab: group/subgroup/project is fine)
 forge: github                    # (optional) github (default) | gitlab (gitlab.com; GITLAB_TOKEN in .env raises rate limits)
 title: NAME                      # shown on the deck title slide (optional, default: repo)
-pypi: PACKAGE_NAME               # PyPI distribution for adoption KPIs; null if not published
+pypi: PACKAGE_NAME               # (optional) shorthand for a PyPI entry in `distribution`; null if not published
+# (optional) Channels users install from; each gets a download KPI on the adoption slides (none = no download KPI).
+# pypi / npm / crates have daily history; docker (Docker Hub pulls) and github_releases (binary asset downloads)
+# only publish totals, so their window counts are exact once an earlier edition's snapshot predates the window.
+# `init` infers these from the repo (pyproject.toml, package.json, Cargo.toml, Docker Hub images it references, release assets).
+distribution:
+  - {type: pypi, name: PACKAGE_NAME}
+  # - {type: npm, name: PACKAGE_NAME}
+  # - {type: crates, name: CRATE_NAME}
+  # - {type: docker, name: NAMESPACE/IMAGE}
+  # - {type: github_releases}
 window_days: 90                  # analysis window; compared with the window before it
 
 # (optional) Where the git clone lives. Default: $REPO_PULSE_CLONES/<owner>__<name>
