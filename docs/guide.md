@@ -163,15 +163,16 @@ deck and runs the layout check. Outputs: the deck, a 5-line summary and a log.
 
 ## Example decks
 
-`docs/examples/` holds published examples, built with names replaced by roles:
+`docs/examples/` holds published examples:
 
 ```bash
-uv run repo-pulse -c configs/trl.yaml --as-of 2026-10-06 build --anonymize \
+uv run repo-pulse -c configs/trl.yaml --as-of 2026-10-06 build \
   --note "Example snapshot as of 2026-10-06, …" --out docs/examples/trl.html
 ```
 
-`--anonymize` replaces GitHub logins and git author names with roles (maintainer A, contributor 1, author 1) everywhere
-in the deck. GitHub Pages serves `docs/` at https://charlespoisson.com/repo-pulse/, with `docs/index.html` as the landing page.
+They show people's names as the forge does, since the repositories are public. `build --anonymize` replaces GitHub
+logins and git author names with roles (maintainer A, contributor 1, author 1) everywhere in the deck, for decks you
+would rather share without names. GitHub Pages serves `docs/` at https://charlespoisson.com/repo-pulse/, with `docs/index.html` as the landing page.
 
 ## Token budget
 

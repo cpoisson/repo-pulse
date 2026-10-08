@@ -1,7 +1,6 @@
 """Capture deck slides (2x, light theme) as video assets: uvx --with playwright python media/video/scripts/capture.py
 
-Captures only from the published, anonymized example decks in docs/examples/ (built with `build --anonymize`), so no
-person's name can end up in the video or the README GIF.
+Captures only from the published example decks in docs/examples/, never from local out/ decks.
 """
 import asyncio
 from pathlib import Path
