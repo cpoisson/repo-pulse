@@ -60,6 +60,19 @@ issue_types:
   enhancement: A request for a new feature, model, backend, or improvement.
   question: A usage question, help request, or discussion without a concrete defect.
 
+# --- Who did the work ------------------------------------------------------------------------------------------------
+# Each changed file is code, tests, docs, build, deps or generated (defaults: lockfiles = deps; CI dirs, Makefile,
+# Bazel/Docker files = build; test dirs and *_test.* = tests; Markdown, docs/, changelog = docs; files whose header
+# says "generated ... DO NOT EDIT" or marked linguist-generated = generated). Override here; first match wins.
+# Bus factor, code concentration and module ownership weigh each commit by log2(1 + code lines changed).
+# path_kinds:
+#   "proto/": generated
+#   "*.ssz.go": generated
+#   "scripts/": build
+# Directory where each PR adds a changelog fragment: `### Added` / `### Fixed` headings inside the file, or towncrier
+# names such as 123.bugfix.md. Gives each author's functional mix (features, fixes, changes, internal). `init` detects it.
+# changelog_fragments: changelog/
+
 # 8-13 themes proposed from the repo's own issues (see skills/repo-pulse/SKILL.md, step 2). Always keep `other`.
 themes:
   THEME_KEY: One sentence describing which issues belong here.

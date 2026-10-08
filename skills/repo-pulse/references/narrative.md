@@ -44,8 +44,8 @@ metric that appears in its `metrics`, so the next edition can check it.
  "headline": "Reach and contributions multiplied this quarter, but one maintainer now handles 95% of merges.",
  "headline_metrics": ["top_merger_share"],
  "findings": [
-  {"text": "Merging is a single point of failure and it is getting worse: one maintainer performed 95% of merges (71% in the prior window), bus factor is 1 and the top committer wrote 72% of commits.",
-   "metrics": ["top_merger_share", "bus_factor", "top_committer_share"], "severity": "high"}],
+  {"text": "Merging is a single point of failure and it is getting worse: one maintainer performed 95% of merges (71% in the prior window), bus factor is 1 and one author did 72% of the code work.",
+   "metrics": ["top_merger_share", "bus_factor", "code_concentration"], "severity": "high"}],
  "nutshells": {"flow": {"text": "Contributions surged and the backlog shrank, but the community waits longer: only 21% of issues get a maintainer reply within 7 days and one person performs 95% of merges.",
    "metrics": ["response_within_7d", "top_merger_share"]}},
  "slides": {"responsiveness": {"title": "Replies are fast when they happen, but most community issues wait over a week",
@@ -53,7 +53,7 @@ metric that appears in its `metrics`, so the next edition can check it.
    "metrics": ["median_first_response_days", "response_within_7d"]}},
  "recommendations": [
   {"priority": 1, "text": "Name a second merger and split review ownership by module",
-   "issue": "95% of merges went through one maintainer (71% prior), bus factor is 1 and 6 modules have one author with over 80% of commits.",
+   "issue": "95% of merges went through one maintainer (71% prior), bus factor is 1 and 6 modules have one author doing over 80% of the code work.",
    "outcome": "Reviews and releases keep flowing when the lead maintainer is away.",
    "actions": ["Grant merge rights to a second maintainer", "Add CODEOWNERS per module", "Require one module-owner approval"],
    "owner": "lead maintainer", "effort": "M", "horizon": "this quarter",

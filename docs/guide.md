@@ -59,7 +59,8 @@ later. Configs, data and decks live in that checkout, so later editions find the
 ## Configuration
 
 Repo-specific details live in `configs/<name>.yaml`: module map, theme taxonomy, critical dependencies, thresholds,
-classifier policy. `repo-pulse init owner/name` writes a starter one and `configs/_template.yaml` documents every field.
+classifier policy, file kinds (`path_kinds`) and the changelog fragment directory (`changelog_fragments`).
+`repo-pulse init owner/name` writes a starter one and `configs/_template.yaml` documents every field.
 Configs and their `data/` artifacts are local (gitignored), so the repo stays generic. Clones go to
 `$REPO_PULSE_CLONES` (default `~/.cache/repo-pulse/clones`), shallow to the analysis window.
 
@@ -80,8 +81,18 @@ Each one compares the last 90 days with the 90 before.
 |---|---|
 | Community & flow | issues opened/closed, net backlog, backlog age, median/p90 maintainer first response, **share answered within 7 days**, open issues with no maintainer reply, PR merge rate (all / external), time to merge (all / external), stale PRs, external PR share, new contributors, **top-merger share** |
 | Adoption & reach | new stars, new forks, forks with their own pushes, PyPI downloads (platform and Python split), releases (GitHub and PyPI), days since release, HF Spaces (optional search proxy), dependents |
-| Codebase & quality | commits, authors, **bus factor**, top-committer share, single-owner modules, lines changed per module, hotspot files, CI pass rate (main / PRs), CI duration, test/source LOC, critical deps behind PyPI or without an upper bound |
+| Codebase & quality | commits, authors, **bus factor** and **code concentration** (on code work, see below), single-owner modules, features / fixes per author (from changelog fragments), lines changed per module, hotspot files, CI pass rate (main / PRs), CI duration, test/source LOC, critical deps behind PyPI or without an upper bound |
 | Issue themes | type mix (bug / enhancement / question), theme counts with intervals, pain map (new, open, age at close) |
+
+Ownership indicators count **code work**, not commits.
+- **What counts:** every changed file is classed as code, tests, docs, build, deps or generated. Each commit
+  weighs `log2(1 + lines changed)`, so a 1,000-line change counts about twice a 30-line one.
+- **Which indicators:** bus factor, code concentration and single-owner modules use the code part only.
+- **What never counts:** generated files (self-declared `DO NOT EDIT` headers, `linguist-generated`), lockfiles and
+  changelog fragments.
+- **Functional mix:** when a project adds a changelog fragment per PR, each author's features and fixes come from it.
+
+The reasoning and the alternatives turned down are in [ADR 0001](adr/0001-ownership-by-code-work.md).
 
 Statuses (on track / watch / at risk) come from `thresholds` in the config. Each change is coloured by whether the move
 is good, bad or neutral for the project.
@@ -175,6 +186,8 @@ in the deck. GitHub Pages serves `docs/` at https://charlespoisson.com/repo-puls
   (`star_history_svg`).
 - **PyPI:** pypistats keeps about 180 days, so a young package's prior window can be partly covered.
 - **Code health** metrics (test/source LOC, module tests) are Python-centric.
+- **Code work** is a proxy for effort: design, review and debugging don't show in lines changed. Generated code
+  under unusual paths needs `path_kinds`, or it counts as someone's work.
 - **HF Spaces and dependents** are best-effort proxies.
 
 ## Development
@@ -184,4 +197,4 @@ uv run --group dev pytest
 ```
 
 [`AGENTS.md`](../AGENTS.md) is the guide for agents (and people) changing the tool itself: layout, invariants and how to
-verify a change.
+verify a change. Decisions about what is measured and why are recorded in [`docs/adr/`](adr/README.md).

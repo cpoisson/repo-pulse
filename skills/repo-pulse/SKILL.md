@@ -129,6 +129,11 @@ or the gold set changes.
 
 ## Known limits
 
+- Bus factor, code concentration and module ownership count *code work*: each commit weighs log2(1 + lines changed in
+  source files), so tests, docs, CI/build files, lockfiles, changelog fragments and generated files (self-declared
+  `DO NOT EDIT` headers, `linguist-generated`) don't make someone the top owner. Check `path_kinds` if a repo keeps
+  generated or build code under unusual paths. With `changelog_fragments` set (`init` detects it), each author's
+  features/fixes/changes come from the fragments maintainers write; without it there is no functional mix.
 - Code-health metrics (test/source LOC) are Python-centric; for Rust/JS-heavy repos say so rather than reading much into them.
 - Stars: GitHub no longer lists stargazers (404 with a token, 401 without, for every repo as of 2026-10), and GH Archive
   star events collapsed in 2026, so "new stars" is blank on a first edition; exact snapshots accumulate in

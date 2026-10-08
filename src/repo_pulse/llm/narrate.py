@@ -95,9 +95,9 @@ def _rules(metrics: dict) -> dict:
         findings.append({"text": text, "metrics": keys, "severity": sev})
 
     if v("bus_factor") == 1:
-        add_f(f"Delivery rests on one person: bus factor is 1 and the top committer wrote {v('top_committer_share'):.0%} of commits.",
-              ["bus_factor", "top_committer_share"], "high")
-        plan.append({"text": "Grow a second line of reviewers and mergers", "issue": "Bus factor is 1 on commits and merges.",
+        add_f(f"Delivery rests on one person: bus factor is 1 and one author did {v('code_concentration'):.0%} of the code work.",
+              ["bus_factor", "code_concentration"], "high")
+        plan.append({"text": "Grow a second line of reviewers and mergers", "issue": "Bus factor is 1 on code work and merges.",
                      "outcome": "Releases and reviews continue when the lead maintainer is unavailable.",
                      "actions": ["Name a second merger", "Assign module review owners"], "metrics": ["bus_factor"],
                      "owner": "lead maintainer", "effort": "M", "horizon": "this quarter", "target": "bus_factor ≥ 2"})

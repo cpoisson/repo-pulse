@@ -23,6 +23,8 @@ def _clone_path(raw: str | None, repo: str, config_path: Path) -> Path:
 FORGES = {"github": ("GitHub", "github.com"), "gitlab": ("GitLab", "gitlab.com")}
 # Distribution channels with public download counts; `name` is the package/image (github_releases needs none).
 CHANNELS = {"pypi": "PyPI", "npm": "npm", "crates": "crates.io", "docker": "Docker Hub", "github_releases": "GitHub release assets"}
+# What a changed file is; only `code` counts toward bus factor and code concentration, generated/deps count for nobody.
+PATH_KINDS = ("code", "tests", "docs", "build", "deps", "generated")
 
 
 @dataclass
@@ -50,6 +52,8 @@ class Config:
     classifier: str = "local"                # local (free, default) | auto (best measured, incl. API) | jev (force Jev)
     forge: str = "github"                    # github | gitlab (gitlab.com): where issues, PRs/MRs and CI come from
     distribution: list[dict] = field(default_factory=list)   # [{type, name}] channels users install from (CHANNELS)
+    path_kinds: dict[str, str] = field(default_factory=dict)  # path prefix or glob -> one of PATH_KINDS, before defaults
+    changelog_fragments: str | None = None   # dir where each PR adds a changelog fragment (Added/Fixed/... or towncrier)
 
     @property
     def owner(self) -> str:
@@ -109,6 +113,8 @@ def load(path: str | Path) -> Config:
         classifier=str(raw.get("classifier") or "local"),
         forge=_forge(raw.get("forge")),
         distribution=dist,
+        path_kinds=_path_kinds(raw.get("path_kinds")),
+        changelog_fragments=raw.get("changelog_fragments"),
     )
 
 
@@ -123,6 +129,13 @@ def _distribution(raw: dict) -> list[dict]:
     if raw.get("pypi") and not any(d["type"] == "pypi" for d in dist):
         dist.insert(0, {"type": "pypi", "name": raw["pypi"]})
     return dist
+
+
+def _path_kinds(raw: dict | None) -> dict[str, str]:
+    for pat, kind in (raw or {}).items():
+        if kind not in PATH_KINDS:
+            raise ValueError(f"path_kinds[{pat!r}] must be one of {', '.join(PATH_KINDS)}, got {kind!r}")
+    return dict(raw or {})
 
 
 def _forge(raw: str | None) -> str:
