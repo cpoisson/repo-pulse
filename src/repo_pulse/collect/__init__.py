@@ -74,6 +74,9 @@ def run(cfg: Config, as_of: str, refresh: bool = False) -> None:
         subprocess.run(["git", "-C", str(cfg.local_clone), "fetch", "-q", "origin"], capture_output=True)
         step("commits", lambda: git_local.commits(cfg.local_clone, 400))
         step("tree", lambda: git_local.tree(cfg.local_clone, registry_path=(cfg.backend_registry or {}).get("path")))
+        step("generated", lambda: git_local.generated_files(cfg.local_clone))
+        if cfg.changelog_fragments:
+            step("changelog", lambda: git_local.changelog_entries(cfg.local_clone, cfg.changelog_fragments, 400))
         if cfg.star_history_svg:
             meta = cached(slug, as_of, "repo", meta_fn)
             step("star_history", lambda: git_local.star_history_from_svg(cfg.local_clone, cfg.star_history_svg, meta["createdAt"]))

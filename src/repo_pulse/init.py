@@ -186,6 +186,20 @@ def distribution(clone_dir: Path, ref: str, files: list[str], repo: str, forge: 
     return out[:6]
 
 
+FRAGMENT_DIRS = ("changelog/", "changelog.d/", "changes/", "newsfragments/", "news/", "unreleased/")
+
+
+def changelog_fragments(clone_dir: Path, ref: str, since_days: int) -> str | None:
+    """The directory where most commits add a changelog fragment (fragments are deleted at release, so look at history)."""
+    total = len(_run("git", "log", ref, "--no-merges", "--format=%H", f"--since={since_days}.days", cwd=clone_dir).split())
+    for d in FRAGMENT_DIRS:
+        added = len(_run("git", "log", ref, "--no-merges", "--diff-filter=A", "--format=%H", f"--since={since_days}.days",
+                         "--", d, cwd=clone_dir).split())
+        if total and added >= max(5, 0.3 * total):
+            return d
+    return None
+
+
 def init(repo: str, out_dir: str = "configs", window_days: int = 90) -> Path:
     forge, repo = parse_repo(repo)
     name = repo.rsplit("/", 1)[1]
@@ -197,6 +211,7 @@ def init(repo: str, out_dir: str = "configs", window_days: int = 90) -> Path:
     cfg = {
         "repo": repo, **({"forge": forge} if forge != "github" else {}), "title": name,
         "distribution": distribution(dest, ref, files, repo, forge, pypi), **DEFAULTS,
+        **({"changelog_fragments": cl} if (cl := changelog_fragments(dest, ref, window_days)) else {}),
         "window_days": window_days, **({"bots": []} if forge != "github" else {}),
         "modules": mods,
         "module_test_keywords": {m: [m.lower().replace("-", "_")] for m in sorted(set(mods.values())) if m not in ("core", "tests", "docs", "ci", "packaging", "examples", "scripts", "demo")},

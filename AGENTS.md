@@ -49,6 +49,7 @@ src/repo_pulse/
 configs/           _template.yaml (documents every field); per-repo configs are local and gitignored
 data/<owner>__<name>/  local (gitignored) decision artifacts: gold.json, bakeoff.json, classifier.json, metrics, narrative inputs
 skills/repo-pulse/ the run playbook (SKILL.md), narrative reference, deck checker
+docs/              guide.md (user guide), adr/ (decision records), examples/ (anonymized decks)
 ```
 
 ## Invariants — do not break these
@@ -69,6 +70,8 @@ skills/repo-pulse/ the run playbook (SKILL.md), narrative reference, deck checke
 
 ## Common changes
 
+- **Changing what an indicator means** (definition, weighting, data source): record it as an ADR in `docs/adr/`
+  (context, decision, alternatives turned down, consequences) and add it to the index there.
 - **New KPI:** add a `kpi(...)` in the right `metrics/*.py`; set `lower_is_better` or add the key to `GOOD_UP` in
   `metrics/__init__.py` (otherwise it renders as neutral); add a threshold in the configs if it should get a status chip;
   put it in a deck slide or `SCORECARD` in `deck/build.py` if it matters to maintainers; add a test in `tests/test_metrics.py`.
