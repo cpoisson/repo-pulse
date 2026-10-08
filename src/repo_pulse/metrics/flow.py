@@ -69,7 +69,8 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
         issue_authors = {i["author"] for i in opened if i["author"] and i["author"] not in maint}
         return dict(
             opened=len(opened), closed=len(closed), net=len(opened) - len(closed),
-            closed_completed=sum(1 for i in closed if i.get("stateReason") == "COMPLETED"),
+            closed_completed=sum(1 for i in closed if i.get("stateReason") == "COMPLETED")
+                if all("stateReason" in i for i in closed) else None,   # GitLab records no close reason
             resp_med=quantile(resp, 0.5), resp_p90=quantile(resp, 0.9), sla=ratio(sla_ok, sla_n), sla_n=sla_n,
             pr_opened=len(pr_open), pr_ext_opened=len(ext_prs), pr_resp_med=quantile(pr_resp, 0.5),
             merged=len(merged), closed_unmerged=len(pr_closed) - len(merged),
@@ -102,8 +103,8 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
     ctx["stale_prs"] = [[p["number"], p["title"], p["author"]] for p in stale][:10]
 
     k += [
-        kpi("issues_opened", "Issues opened", c["opened"], p["opened"], source="GitHub issues"),
-        kpi("issues_closed", "Issues closed", c["closed"], p["closed"], source="GitHub issues"),
+        kpi("issues_opened", "Issues opened", c["opened"], p["opened"], source=f"{cfg.forge_name} issues"),
+        kpi("issues_closed", "Issues closed", c["closed"], p["closed"], source=f"{cfg.forge_name} issues"),
         kpi("issue_backlog_net", "Net issue backlog change", c["net"], p["net"], lower_is_better=True,
             note="opened − closed in window"),
         kpi("open_issues", "Open issues (now)", len(open_now), lower_is_better=True),

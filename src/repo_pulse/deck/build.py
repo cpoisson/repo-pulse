@@ -16,16 +16,17 @@ SCORECARD = [
         "Contributions": ["external_pr_share", "new_contributors", "pr_merge_rate", "external_pr_merge_rate",
                           "median_time_to_merge_external_days", "top_merger_share"]}},
     {"id": "adoption", "title": "Adoption & reach", "tables": {
-        "Reach": ["stars_new", "forks_new", "forks_active", "pypi_downloads"],
+        "Reach": ["stars_new", "forks_new", "forks_active", "pypi_downloads", "npm_downloads", "crates_downloads",
+                  "release_downloads", "docker_pulls", "docker_pulls_total"],
         "Releases": ["releases", "days_since_release"]}},
     {"id": "code", "title": "Codebase, quality & issue themes", "tables": {
-        "Ownership & quality": ["bus_factor", "top_committer_share", "modules_single_owner", "ci_pass_rate_main", "ci_pass_rate_pr",
+        "Ownership & quality": ["bus_factor", "code_concentration", "modules_single_owner", "ci_pass_rate_main", "ci_pass_rate_pr",
                                 "backends_with_tests", "critical_deps_behind", "critical_deps_unbounded"],
         "Issue themes": ["bug_share", "top_theme_share", "classifier_coverage"]}},
 ]
 # First five with data are shown on the title and summary slides.
 HEADLINE_KPIS = ["stars_new", "issues_opened", "prs_merged", "response_within_7d", "bus_factor",
-                 "pypi_downloads", "forks_new", "open_issues_over_90d", "stale_open_prs", "pr_contributors"]
+                 "pypi_downloads", "npm_downloads", "crates_downloads", "release_downloads", "forks_new", "open_issues_over_90d", "stale_open_prs", "pr_contributors"]
 
 
 def _token_report(base: Path, narr: dict) -> dict:
@@ -54,8 +55,9 @@ def _people(metrics: dict) -> dict[str, str]:
             alias[name] = f"maintainer {chr(65 + nm) if nm < 26 else nm + 1}"; nm += 1
         else:
             nc += 1; alias[name] = f"contributor {nc}"
-    for i, (name, *_) in enumerate(ch.get("commit_authors", []), 1):  # git display names, not logins
-        alias.setdefault(name, f"author {i}")
+    names = [n for n, *_ in ch.get("commit_authors", []) + ch.get("work_by_author", [])]  # git display names, not logins
+    for name in dict.fromkeys(names):
+        alias.setdefault(name, f"author {sum(v.startswith('author ') for v in alias.values()) + 1}")
     return alias
 
 

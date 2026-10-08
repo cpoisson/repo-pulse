@@ -142,6 +142,25 @@
     return s + "</svg>";
   }
 
+  // Horizontal bars split into stacked parts: rows [{label, parts: [[name, value, color]], tip}].
+  function stackbars(rows, { labelW = 130, rowH = 30, W = 420, valFmt = (v) => fmt(v), empty } = {}) {
+    const tot = (r) => r.parts.reduce((a, [, v]) => a + v, 0);
+    if (!rows.length || rows.every((r) => !tot(r))) return EMPTY(empty);
+    const pad = { t: 4, b: 4, r: 48 }, h = pad.t + pad.b + rows.length * rowH;
+    const mx = niceMax(Math.max(...rows.map(tot), 0.0001));
+    const sx = (v) => (v / mx) * (W - labelW - pad.r);
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" role="img">`;
+    rows.forEach((r, i) => {
+      const yc = pad.t + i * rowH + rowH / 2, bh = 14;
+      let x0 = labelW;
+      s += `<text class="lab" x="${labelW - 8}" y="${yc + 4}" text-anchor="end">${esc(r.label)}</text>`;
+      r.parts.forEach(([, v, color]) => { const w = sx(v); if (w > 0) { s += `<rect class="mark" x="${x0}" y="${yc - bh / 2}" width="${w}" height="${bh}" fill="${color}"/>`; x0 += w; } });
+      s += `<text class="val" x="${x0 + 6}" y="${yc + 4}">${valFmt(tot(r))}</text>`;
+      s += `<rect class="hit" x="0" y="${yc - rowH / 2}" width="${W}" height="${rowH}" data-tip="${esc(r.tip || "")}"/>`;
+    });
+    return s + `<line class="baseline" x1="${labelW}" x2="${labelW}" y1="0" y2="${h}"/></svg>`;
+  }
+
   function histogram(values, edges, labels, { color = "var(--s1)", extra = null, rowH = 26, W = 640 } = {}) {
     const counts = labels.map(() => 0);
     values.forEach((v) => { for (let i = 0; i < edges.length - 1; i++) if (v >= edges[i] && v < edges[i + 1]) { counts[i]++; break; } });
@@ -170,7 +189,7 @@
      <h1 class="hero">${esc(N.headline || "Project health: last " + M.window_days + " days vs the " + M.window_days + " before")}</h1>
      <div class="title-strip">${(D.headline_kpis || []).filter((k) => K[k]).map((k) => `<div><b>${fmt(K[k].value, K[k].unit)}</b><span>${esc(K[k].label)}</span>${deltaHtml(K[k])}</div>`).join("")}</div>
      <p class="title-meta">Current window ${esc(M.windows.cur[0])} → ${esc(M.windows.cur[1])} vs prior ${esc(M.windows.prior[0])} → ${esc(M.windows.prior[1])}.
-     Numbers are computed from ${["GitHub", "git", K.pypi_downloads ? "PyPI" : "", K.hf_spaces_new ? "the HF Hub" : ""].filter(Boolean).join(", ")}; every narrative claim is checked against them.</p>
+     Numbers are computed from ${[M.forge || "GitHub", "git", ...(X.adoption.distribution_sources || (K.pypi_downloads ? ["PyPI"] : [])), K.hf_spaces_new ? "the HF Hub" : ""].filter(Boolean).join(", ")}; every narrative claim is checked against them.</p>
      ${D.note ? `<p class="title-meta"><b>${esc(D.note)}</b></p>` : ""}
      <p class="title-meta muted">Press → to start · O for overview · narrative: ${esc(N.source || "none")}</p></div>`);
 
@@ -221,22 +240,35 @@
      <div class="card"><h3>Latest issues with no maintainer reply</h3><table class="compact"><tbody>${(X.flow.unanswered_open_issues || []).slice(0, 6).map(([n, t]) => `<tr><td class="num">#${n}</td><td class="clamp">${esc(t)}</td></tr>`).join("")}</tbody></table></div></div>`);
 
   // 8 contributors
+  const WORK_KINDS = [["code", "var(--s1)"], ["tests", "var(--s3)"], ["docs", "var(--s2)"], ["build", "var(--s4)"]];
+  const pctFmt = (v) => `${Math.round(v * 100)}%`;
+  const FUNC_KINDS = ["feature", "fix", "change", "removal", "docs", "internal", "other"];
   const maint = new Set(X.flow.maintainers);
   S("contributors", { kicker: "Deep dive · community & flow", title: T("contributors", "Who is contributing"), sowhat: ns("contributors").so_what, metrics: ns("contributors").metrics, section: "Deep dives", station: "People" },
     `${tiles(["pr_contributors", "new_contributors", "external_pr_share", "top_merger_share", "bus_factor"])}
      <div class="cols3 grow"><div class="card span2"><h3>PRs opened this window, by author</h3>${legend([["maintainer", "var(--s1)"], ["outside contributor", "var(--s3)"]])}
        ${hbars(C.pr_authors.slice(0, 9).map(([a, n]) => ({ label: a, value: n, color: maint.has(a) ? "var(--s1)" : "var(--s3)" })), { labelW: 150, rowH: 30, W: 780 })}</div>
      <div class="card"><h3>Who merges</h3>${hbars((C.mergers || []).map(([a, n]) => ({ label: a || "?", value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420, empty: "No PRs merged in this window." })}
-       <h3 style="margin-top:10px">Commits, by author</h3>${hbars((C.commit_authors || []).slice(0, 5).map(([a, n]) => ({ label: a, value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420 })}</div></div>`);
+       <h3 style="margin-top:10px">Share of the team's work, by author</h3>${legend(WORK_KINDS.map(([k, c]) => [k, c]))}
+       ${C.work_by_author ? stackbars(C.work_by_author.slice(0, 5).map(([a, mix, n, func]) => ({ label: a,
+           parts: WORK_KINDS.map(([k, c]) => [k, mix[k] || 0, c]),
+           tip: `<b>${esc(a)}</b><br>${n} commits<br>${WORK_KINDS.map(([k]) => `${k}: ${pctFmt(mix[k] || 0)}`).join(" · ")}<br><span class="muted">commits weighted by log2(1 + lines); generated files, lockfiles and changelog fragments excluded</span>${func && func._logged ? `<br>changelog: ${FUNC_KINDS.filter((f) => func[f]).map((f) => `${func[f]} ${f}`).join(" · ")}` : ""}` })), { labelW: 130, rowH: 26, W: 420, valFmt: pctFmt })
+         : hbars((C.commit_authors || []).slice(0, 5).map(([a, n]) => ({ label: a, value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420 })}</div></div>`);
 
   // 9 adoption
+  const dl = C.downloads_weekly || (C.pypi_weekly ? { name: "PyPI downloads", points: C.pypi_weekly } : null);
+  const dlNote = (X.adoption.download_keys || ["pypi_downloads"]).map((k) => K[k]).find((m) => m && m.label === dl?.name)?.note || (C.pypi_weekly && !C.downloads_weekly ? K.pypi_downloads?.note : "");
+  const relDl = X.adoption.release_downloads || [];
   const pct = (arr) => { const t = arr.reduce((a, [, v]) => a + v, 0) || 1; return arr.slice(0, 4).map(([k, v]) => `${esc(k)} ${Math.round((v / t) * 100)}%`).join(" · "); };
   S("adoption", { kicker: "Deep dive · adoption & reach", title: T("adoption", "Adoption"), sowhat: ns("adoption").so_what, metrics: ns("adoption").metrics, section: "Deep dives", station: "Adoption" },
-    `${tiles(["stars_new", "forks_new", "forks_active", "pypi_downloads", "days_since_release"])}
+    `${tiles(["stars_new", "forks_new", ...(X.adoption.download_keys || ["pypi_downloads"]).filter((k) => K[k] && K[k].value !== null).slice(0, 2), "days_since_release", "forks_active"].filter((k) => K[k]).slice(0, 5))}
      <div class="cols3 grow"><div class="card"><h3>New stars per week ${/approx/.test(K.stars_new?.note || "") ? '<span class="pill">approx.</span>' : ""}</h3>${C.stars_weekly ? weeklyBars(C.stars_weekly, { name: "new stars", W: 420, h: 290 }) : '<p class="muted">no star history</p>'}
-       <p class="small muted">${esc(K.stars_new?.note || "From the GitHub stargazers API.")}</p></div>
-     ${C.pypi_weekly ? `<div class="card"><h3>PyPI downloads per week</h3>${weeklyBars(C.pypi_weekly.filter((p) => p[0] >= M.windows.prior[0]), { name: "downloads", W: 420, h: 290 })}
-       <p class="small muted">${esc(K.pypi_downloads?.note || "No mirrors.")}</p></div>` : `<div class="card"><h3>New forks per week</h3>${weeklyBars(C.forks_weekly, { name: "new forks", W: 420, h: 290 })}</div>`}
+       <p class="small muted">${esc(K.stars_new?.note || `From the ${M.forge || "GitHub"} stargazers API.`)}</p></div>
+     ${dl ? `<div class="card"><h3>${esc(dl.name)} per week</h3>${weeklyBars(dl.points.filter((p) => p[0] >= M.windows.prior[0]), { name: "downloads", W: 420, h: 290 })}
+       <p class="small muted">${esc(dlNote || "")}</p></div>`
+       : relDl.length ? `<div class="card"><h3>Binary downloads per release (to date)</h3>${hbars(relDl.slice(0, 7).map(([tag, d, n]) => ({ label: tag, value: n, color: "var(--s1)" })), { labelW: 110, rowH: 30, W: 420 })}
+       <p class="small muted">${esc(K.release_downloads?.note || "")}</p></div>`
+       : `<div class="card"><h3>New forks per week</h3>${weeklyBars(C.forks_weekly, { name: "new forks", W: 420, h: 290 })}</div>`}
      <div class="card">${(C.pypi_system || []).length ? `<h3>Who downloads (this window)</h3><p class="small"><b>OS</b><br>${pct(C.pypi_system)}</p><p class="small"><b>Python</b><br>${pct(C.pypi_python_minor || [])}</p>` : ""}
        <h3>Releases</h3><p class="small">${(X.adoption.releases || []).slice(0, 4).map(([t, d]) => `${esc(t)} <span class="muted">${esc(d)}</span>`).join("<br>")}</p></div></div>`);
 
@@ -247,7 +279,7 @@
     note: `${commits} commits${owner[m] > 0.8 && commits >= 3 ? " · single-owner" : ""}${m in tested && !tested[m] ? " · no tests" : ""}`,
     tip: `<b>${esc(m)}</b><br>lines changed: ${fmt(cur)} (prior ${fmt(prior)})<br>commits: ${commits}<br>top author share: ${owner[m] !== undefined ? Math.round(owner[m] * 100) + "%" : "—"}${m in tested ? `<br>matching tests: ${tested[m] ? "yes" : "no"}` : ""}` }));
   S("code", { kicker: "Deep dive · codebase", title: T("code", "Where the code is changing"), sowhat: ns("code").so_what, metrics: ns("code").metrics, section: "Deep dives", station: "Code" },
-    `${tiles(["commits", "commit_authors", "top_committer_share", "modules_single_owner", "test_loc_ratio"])}
+    `${tiles(["commits", "commit_authors", "code_concentration", "modules_single_owner", "test_loc_ratio"])}
      <div class="cols2 grow"><div class="card"><h3>Lines changed per module (bar = now, tick = prior)</h3>${hbars(churnRows, { labelW: 80, rowH: 33, W: 600, empty: "No commits landed in this window." })}</div>
      <div class="card"><h3>Hottest files this window</h3>${(C.hotspot_files || []).length ? "" : EMPTY("No files changed in this window.")}<table class="compact"><tbody>${(C.hotspot_files || []).slice(0, 11).map(([f, n]) => `<tr><td class="clamp mono">${esc(f)}</td><td class="num">${fmt(n)}</td></tr>`).join("")}</tbody></table></div></div>`);
 
@@ -309,16 +341,25 @@
     `<div class="cols2 grow small"><div class="card"><h3>Method</h3>
       <p>Current window = last ${M.window_days} days to ${esc(M.as_of)}; prior = the ${M.window_days} days before. Bots excluded; maintainers = people who merged a PR in the last year.
       Response times count the first comment or review by a maintainer on items opened by someone else.</p>
-      <h3>Sources</h3><p>GitHub via <code>gh</code> (issues, PRs, reviews, stars, forks, releases, Actions runs of <code>${esc(X.code.ci_workflow || "CI")}</code>); git clone at <code>${esc(X.code.head || "")}</code>${K.pypi_downloads ? "; pypistats.org" : ""}${K.hf_spaces_new ? "; Hugging Face Hub search" : ""}.</p>
-      <h3>Caveats</h3><p>${["stars_new", "pypi_downloads", "hf_spaces_new", "dependents", "backends_with_tests"].filter((k) => K[k]).map((k) => `<b>${esc(K[k].label)}</b>: ${esc(K[k].note || "—")}`).join("<br>")}</p></div>
+      <h3>Sources</h3><p>${M.forge === "GitLab" ? "GitLab REST API (issues, merge requests and their notes, stars, forks, releases, default-branch pipelines)" : `GitHub via <code>gh</code> (issues, PRs, reviews, stars, forks, releases, Actions runs of <code>${esc(X.code.ci_workflow || "CI")}</code>)`}; git clone at <code>${esc(X.code.head || "")}</code>${(X.adoption.distribution_sources || (K.pypi_downloads ? ["pypistats.org"] : [])).map((s) => "; " + esc(s)).join("")}${K.hf_spaces_new ? "; Hugging Face Hub search" : ""}.</p>
+      <h3>Caveats</h3><p>${["stars_new", ...(X.adoption.download_keys || ["pypi_downloads"]), "hf_spaces_new", "dependents", "backends_with_tests"].filter((k) => K[k]).map((k) => `<b>${esc(K[k].label)}</b>: ${esc(K[k].note || "—")}`).join("<br>")}</p></div>
      <div class="card"><h3>Issue classifier</h3>${bk}
       <h3>Narrative</h3><p>${esc(N.source || "none")}. ${(N.dropped || []).length} claims removed by the number check.</p>
       <h3>Token report</h3><p>${esc(tb.summary || "—")}</p></div></div>`);
   S("all-1", { kicker: "Appendix", title: "All indicators · community & flow", section: "Appendix", station: "KPIs 1" },
     `<div class="cols2 grow">${[0, 1].map((h) => { const ks = M.families.flow; const mid = Math.ceil(ks.length / 2); return `<div class="card">${kpiTable(h ? ks.slice(mid) : ks.slice(0, mid))}</div>`; }).join("")}</div>`);
   S("all-2", { kicker: "Appendix", title: "All indicators · adoption, codebase, themes", section: "Appendix", station: "KPIs 2" },
-    `<div class="cols2 grow"><div class="card"><h3>${famNames.adoption}</h3>${kpiTable(M.families.adoption)}<h3 style="margin-top:8px">${famNames.themes}</h3>${kpiTable(M.families.themes || [])}</div>
-     <div class="card"><h3>${famNames.code}</h3>${kpiTable(M.families.code)}</div></div>`);
+    (() => { // flow the three families into two balanced columns; a family split across them repeats its heading
+      const fams = ["adoption", "themes", "code"].map((f) => [f, M.families[f] || []]).filter(([, ks]) => ks.length);
+      const total = fams.reduce((a, [, ks]) => a + ks.length + 2, 0), cols = [[], []];
+      let used = 0;
+      fams.forEach(([f, ks]) => ks.forEach((k, i) => {
+        const c = used + (i ? 0 : 2) > total / 2 + 1 ? 1 : 0;
+        const last = cols[c][cols[c].length - 1];
+        if (last && last[0] === f) last[1].push(k); else cols[c].push([f, [k]]);
+        used += i ? 1 : 2;
+      }));
+      return `<div class="cols2 grow">${cols.map((col) => `<div class="card">${col.map(([f, ks], i) => `<h3${i ? ' style="margin-top:8px"' : ""}>${famNames[f]}</h3>${kpiTable(ks)}`).join("")}</div>`).join("")}</div>`; })());
 
   // ---------- render: metro band, frame, footer
   const LINES = [

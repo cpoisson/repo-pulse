@@ -1,10 +1,11 @@
-"""`repo-pulse init owner/name`: clone the repo (history limited to the analysis span) and write a starter config.
+"""`repo-pulse init owner/name` (or a github.com / gitlab.com URL): clone the repo (history limited to the analysis span) and write a starter config.
 
 Everything inferable is inferred (module map, test keywords, PyPI package, critical deps). The issue theme taxonomy
 is left empty on purpose: it should be proposed from the repo's own issues (see the skill), not guessed.
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -17,7 +18,7 @@ from pathlib import Path
 import requests
 import yaml
 
-from .config import default_clone
+from .config import FORGES, default_clone
 
 CODE_EXT = (".py", ".js", ".ts", ".tsx", ".rs", ".go", ".java", ".kt", ".swift", ".c", ".cc", ".cpp", ".h", ".rb", ".cs")
 SKIP_DIRS = {".github", "docs", "doc", "examples", "scripts", "archive", "assets", "benchmarks", "demo", "tests", "test", "notebooks"}
@@ -52,7 +53,18 @@ def _run(*args: str, cwd: Path | None = None) -> str:
     return subprocess.run(args, cwd=cwd, capture_output=True, text=True, check=True).stdout
 
 
-def clone(repo: str, since_days: int, dest: Path | None = None) -> Path:
+def parse_repo(arg: str) -> tuple[str, str]:
+    """'owner/name' (GitHub) or a forge URL -> (forge, repo path); GitLab paths may nest groups."""
+    m = re.match(r"^(?:https?://)?(?:www\.)?([\w.-]+\.\w+)/(.+?)(?:\.git)?/?$", arg.strip())
+    if not m:
+        return "github", arg.strip().strip("/")
+    forge = next((f for f, (_, host) in FORGES.items() if host == m.group(1).lower()), None)
+    if not forge:
+        raise ValueError(f"unsupported host {m.group(1)!r}; supported: {', '.join(h for _, h in FORGES.values())}")
+    return forge, m.group(2).split("/-/")[0]
+
+
+def clone(repo: str, since_days: int, dest: Path | None = None, url: str | None = None) -> Path:
     dest = dest or default_clone(repo)
     since = (date.today() - timedelta(days=since_days)).isoformat()
     if dest.exists():
@@ -60,7 +72,7 @@ def clone(repo: str, since_days: int, dest: Path | None = None) -> Path:
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
         print(f"cloning {repo} (history since {since})…", file=sys.stderr)
-        url = f"https://github.com/{repo}.git"
+        url = url or f"https://github.com/{repo}.git"
         r = subprocess.run(["git", "clone", "-q", "--no-checkout", f"--shallow-since={since}", url, str(dest)], capture_output=True)
         if r.returncode != 0:  # quiet repo: no commit in the window makes --shallow-since fail; keep the tip instead
             shutil.rmtree(dest, ignore_errors=True)
@@ -130,15 +142,77 @@ def python_meta(clone_dir: Path, ref: str, files: list[str], repo_name: str) -> 
     return name, list(dict.fromkeys(ranked))[:8]
 
 
+DOCKER_REF = re.compile(r"(?:docker\.io/|hub\.docker\.com/r/|docker (?:pull|run)(?: [-\w=]+)* )([a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*)")
+
+
+def _exists(url: str, **kw) -> bool:
+    try:
+        return requests.get(url, timeout=20, headers={"User-Agent": "repo-pulse"}, **kw).ok
+    except requests.RequestException:
+        return False
+
+
+def distribution(clone_dir: Path, ref: str, files: list[str], repo: str, forge: str, pypi: str | None) -> list[dict]:
+    """Channels with public download counts that this repo ships through, each checked against its registry."""
+    show = lambda f: subprocess.run(["git", "show", f"{ref}:{f}"], cwd=clone_dir, capture_output=True, text=True).stdout
+    out = [{"type": "pypi", "name": pypi}] if pypi else []
+    if "package.json" in files:
+        try:
+            pkg = json.loads(show("package.json"))
+            if pkg.get("name") and not pkg.get("private") and _exists(f"https://registry.npmjs.org/{pkg['name']}"):
+                out.append({"type": "npm", "name": pkg["name"]})
+        except ValueError:
+            pass
+    for f in sorted((f for f in files if f.endswith("Cargo.toml") and f.count("/") <= 1), key=lambda f: f.count("/")):
+        try:
+            name = tomllib.loads(show(f)).get("package", {}).get("name")
+        except Exception:
+            continue
+        if name and _exists(f"https://crates.io/api/v1/crates/{name}"):
+            out.append({"type": "crates", "name": name})
+            break
+    # Docker Hub images the repo itself tells users to pull, plus <owner>/<name>
+    docs = [f for f in files if f.lower().endswith((".md", ".sh", ".yml", ".yaml")) and f.count("/") <= 2][:300]
+    refs = Counter(m.lower() for f in docs for m in DOCKER_REF.findall(show(f)))
+    candidates = [r for r, _ in refs.most_common(8)] + [repo.lower()]
+    for img in dict.fromkeys(candidates):
+        r = requests.get(f"https://hub.docker.com/v2/repositories/{img}/", timeout=20)
+        if r.ok and (r.json().get("pull_count") or 0) > 0:
+            out.append({"type": "docker", "name": img})
+    if forge == "github":
+        rels = subprocess.run(["gh", "api", f"repos/{repo}/releases?per_page=10"], capture_output=True, text=True)
+        if rels.returncode == 0 and any(r.get("assets") for r in json.loads(rels.stdout or "[]")):
+            out.append({"type": "github_releases"})
+    return out[:6]
+
+
+FRAGMENT_DIRS = ("changelog/", "changelog.d/", "changes/", "newsfragments/", "news/", "unreleased/")
+
+
+def changelog_fragments(clone_dir: Path, ref: str, since_days: int) -> str | None:
+    """The directory where most commits add a changelog fragment (fragments are deleted at release, so look at history)."""
+    total = len(_run("git", "log", ref, "--no-merges", "--format=%H", f"--since={since_days}.days", cwd=clone_dir).split())
+    for d in FRAGMENT_DIRS:
+        added = len(_run("git", "log", ref, "--no-merges", "--diff-filter=A", "--format=%H", f"--since={since_days}.days",
+                         "--", d, cwd=clone_dir).split())
+        if total and added >= max(5, 0.3 * total):
+            return d
+    return None
+
+
 def init(repo: str, out_dir: str = "configs", window_days: int = 90) -> Path:
-    owner, name = repo.split("/")
-    dest = clone(repo, since_days=window_days * 2 + 60)
+    forge, repo = parse_repo(repo)
+    name = repo.rsplit("/", 1)[1]
+    dest = clone(repo, since_days=window_days * 2 + 60, url=f"https://{FORGES[forge][1]}/{repo}.git")
     ref = "origin/HEAD" if subprocess.run(["git", "-C", str(dest), "rev-parse", "-q", "--verify", "origin/HEAD"], capture_output=True).returncode == 0 else "HEAD"
     files = _run("git", "ls-tree", "-r", "--name-only", ref, cwd=dest).split("\n")
     mods = module_map(files)
     pypi, deps = python_meta(dest, ref, files, name)
     cfg = {
-        "repo": repo, "title": name, "pypi": pypi, **DEFAULTS, "window_days": window_days,
+        "repo": repo, **({"forge": forge} if forge != "github" else {}), "title": name,
+        "distribution": distribution(dest, ref, files, repo, forge, pypi), **DEFAULTS,
+        **({"changelog_fragments": cl} if (cl := changelog_fragments(dest, ref, window_days)) else {}),
+        "window_days": window_days, **({"bots": []} if forge != "github" else {}),
         "modules": mods,
         "module_test_keywords": {m: [m.lower().replace("-", "_")] for m in sorted(set(mods.values())) if m not in ("core", "tests", "docs", "ci", "packaging", "examples", "scripts", "demo")},
         "critical_dependencies": deps,

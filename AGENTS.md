@@ -8,7 +8,7 @@ This file is for agents changing **this codebase**. Two other entry points exist
 | Scheduled edition of an already-configured repo | `scripts/run-edition.sh` → prompt `tasks/edition.md` | an unattended agent (pi, codex, claude) |
 | Change the tool | this file | agents developing repo-pulse |
 
-repo-pulse turns a public GitHub repo into a self-contained 16:9 HTML deck for its maintainers: deterministic
+repo-pulse turns a public GitHub or GitLab repo into a self-contained 16:9 HTML deck for its maintainers: deterministic
 90-day-vs-prior metrics, a measured issue classifier, a number-checked narrative, and a prioritized improvement plan.
 
 ## Setup and checks
@@ -23,7 +23,7 @@ uv run repo-pulse --help
 all of `data/` are gitignored, so a fresh clone has no deck to rebuild. To get one, configure any small public repo:
 
 ```bash
-uv run repo-pulse init owner/name                    # writes configs/<name>.yaml; a repo with a few hundred issues takes ~1 min
+uv run repo-pulse init owner/name                    # or a gitlab.com URL; writes configs/<name>.yaml; a repo with a few hundred issues takes ~1 min
 C=configs/<name>.yaml
 uv run repo-pulse -c $C collect && uv run repo-pulse -c $C analyze && uv run repo-pulse -c $C narrate && uv run repo-pulse -c $C build
 uvx --with playwright python skills/repo-pulse/scripts/check_deck.py out/<name>-pulse-<date>.html
@@ -41,7 +41,7 @@ src/repo_pulse/
   cli.py           commands: init collect issues gold bakeoff classify analyze digest narrate build all
   config.py        Config dataclass; everything repo-specific comes from configs/<name>.yaml
   init.py          clone + infer module map / PyPI package / deps → starter config
-  collect/         github.py (gh GraphQL/REST), git_local.py, pypi.py, hfhub.py; cache.py = data/raw/<slug>/<date>/
+  collect/         github.py (gh GraphQL/REST), gitlab.py (REST + GraphQL notes, same record shapes), git_local.py, pypi.py, distribution.py (npm, crates.io, Docker Hub, release assets), hfhub.py; cache.py = data/raw/<slug>/<date>/
   metrics/         flow, adoption, code, themes → metrics-<date>.json (kpi() records: key, label, value, prior, unit, status, direction)
   classify/        models.py (candidates), bakeoff.py (measure + decide), calibration.py, gold.py, run.py (production labels), report.py
   llm/             narrate.py (file > optional API > rules), validate.py (number grounding)
@@ -49,6 +49,7 @@ src/repo_pulse/
 configs/           _template.yaml (documents every field); per-repo configs are local and gitignored
 data/<owner>__<name>/  local (gitignored) decision artifacts: gold.json, bakeoff.json, classifier.json, metrics, narrative inputs
 skills/repo-pulse/ the run playbook (SKILL.md), narrative reference, deck checker
+docs/              guide.md (user guide), adr/ (decision records), examples/ (anonymized decks)
 ```
 
 ## Invariants — do not break these
@@ -69,6 +70,8 @@ skills/repo-pulse/ the run playbook (SKILL.md), narrative reference, deck checke
 
 ## Common changes
 
+- **Changing what an indicator means** (definition, weighting, data source): record it as an ADR in `docs/adr/`
+  (context, decision, alternatives turned down, consequences) and add it to the index there.
 - **New KPI:** add a `kpi(...)` in the right `metrics/*.py`; set `lower_is_better` or add the key to `GOOD_UP` in
   `metrics/__init__.py` (otherwise it renders as neutral); add a threshold in the configs if it should get a status chip;
   put it in a deck slide or `SCORECARD` in `deck/build.py` if it matters to maintainers; add a test in `tests/test_metrics.py`.
@@ -85,6 +88,12 @@ skills/repo-pulse/ the run playbook (SKILL.md), narrative reference, deck checke
 
 ## Conventions
 
+- English is the language of the repo and of its development: code, comments, docs, ADRs, commit messages, decks, and
+  the agent's replies while working on the tool, whatever language a request is written in.
+- Every evolution (feature, indicator change, data source, behaviour change) is tracked by a GitHub issue opened
+  before the work starts: the problem, the proposed change and how it will be checked. Commits and PRs reference it
+  (`Refs #N`, or `Closes #N` on the last one), and an ADR links the issue it came from. Trivial fixes (typos, a broken
+  test) don't need one.
 - Match the surrounding code: small pure functions, type hints, comments only where the *why* is not obvious.
 - Prefer the standard library and existing dependencies; justify any new one.
 - Commit messages describe the change; no agent attribution trailers or tool mentions.

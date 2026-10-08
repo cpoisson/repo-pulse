@@ -26,3 +26,22 @@ def test_clone_override_expands_env(monkeypatch, tmp_path):
     cfg.parent.mkdir()
     cfg.write_text("repo: a/b\nlocal_clone: $SRC/b\n")
     assert load(cfg).local_clone == tmp_path / "b"
+
+
+def test_forge_defaults_to_github_and_accepts_gitlab(tmp_path):
+    cfg = tmp_path / "configs" / "x.yaml"
+    cfg.parent.mkdir()
+    cfg.write_text("repo: a/b\n")
+    assert load(cfg).web_url == "https://github.com/a/b"
+    cfg.write_text("repo: grp/sub/proj\nforge: gitlab\n")
+    c = load(cfg)
+    assert (c.owner, c.name, c.web_url) == ("grp/sub", "proj", "https://gitlab.com/grp/sub/proj")
+
+
+def test_parse_repo_urls():
+    from repo_pulse.init import parse_repo
+
+    assert parse_repo("owner/name") == ("github", "owner/name")
+    assert parse_repo("https://github.com/owner/name.git") == ("github", "owner/name")
+    assert parse_repo("https://gitlab.com/fdroid/fdroiddata") == ("gitlab", "fdroid/fdroiddata")
+    assert parse_repo("gitlab.com/grp/sub/proj/-/issues") == ("gitlab", "grp/sub/proj")

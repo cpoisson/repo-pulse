@@ -1,6 +1,7 @@
 """Local git history: commits with per-file numstat."""
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -32,6 +33,40 @@ def commits(clone: Path, since_days: int = 400, ref: str | None = None) -> list[
                 a, d, p = parts
                 files.append({"path": p, "add": int(a) if a.isdigit() else 0, "del": int(d) if d.isdigit() else 0})
         result.append({"sha": sha, "author": name, "email": email, "date": date, "subject": subject, "files": files})
+    return result
+
+
+def generated_files(clone: Path, ref: str | None = None) -> dict:
+    """Files that declare themselves generated (the "Code generated ... DO NOT EDIT" convention and similar headers),
+    plus `linguist-generated` patterns from .gitattributes; their lines are not anyone's work."""
+    ref = ref or default_ref(clone)
+    r = subprocess.run(["git", "-C", str(clone), "grep", "-l", "-i", "-E", r"generated.*do not edit|^.{0,4}@generated", ref],
+                       capture_output=True, text=True)
+    paths = sorted({ln.split(":", 1)[1] for ln in r.stdout.splitlines() if ":" in ln})
+    patterns = [ln.split()[0] for ln in _show(clone, ref, ".gitattributes").splitlines()
+                if ln.strip() and not ln.startswith("#") and re.search(r"linguist-generated(=true)?(\s|$)", ln)]
+    return {"paths": paths, "patterns": patterns}
+
+
+def changelog_entries(clone: Path, path: str, since_days: int = 400, ref: str | None = None) -> dict[str, list[str]]:
+    """{sha: [section, ...]} from changelog fragments each commit adds under `path`: `## Fixed`-style headings inside
+    the fragment (keep-a-changelog sections), else the type in a towncrier file name (123.bugfix.md)."""
+    ref = ref or default_ref(clone)
+    out = _git(clone, "log", ref, "--no-merges", "-p", "--format=\x1e%H", f"--since={since_days}.days", "--", path)
+    result: dict[str, list[str]] = {}
+    for block in out.split("\x1e")[1:]:
+        sha, _, diff = block.partition("\n")
+        sections: list[str] = []
+        for ln in diff.splitlines():
+            if ln.startswith("+++ b/"):
+                parts = ln[6:].rsplit("/", 1)[-1].split(".")
+                typ = parts[-2] if parts[-1] in ("md", "rst", "txt") and len(parts) >= 3 else parts[-1] if len(parts) == 2 else None
+                if typ and not typ.isdigit() and typ.lower() not in ("md", "rst", "txt"):
+                    sections.append(typ.lower())
+            elif m := re.match(r"\+#{2,3}\s+([A-Za-z]+)", ln):
+                sections.append(m.group(1).lower())
+        if sections:
+            result[sha.strip()] = sorted(set(sections))
     return result
 
 
