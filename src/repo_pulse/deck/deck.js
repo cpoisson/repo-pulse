@@ -244,10 +244,21 @@
   const pctFmt = (v) => `${Math.round(v * 100)}%`;
   const FUNC_KINDS = ["feature", "fix", "change", "removal", "docs", "internal", "other"];
   const maint = new Set(X.flow.maintainers);
+  // PR type: from the changelog fragment of a merged PR, or from the files it touches (see metrics/code.py pr_type)
+  function prTypeChart() {
+    const T = C.pr_types || {}, logged = Object.values(T).some((t) => t.feature || t.fix || t.change || t.internal);
+    const kinds = [["feature", "feature", "var(--s3)"], ["fix", "fix", "var(--s2)"], ["change", "change", "var(--s1)"], ["internal", "internal", "var(--s4)"],
+      ["untyped", "code", "var(--s1)"], ["no_code", "tests/docs/build only", "var(--ink-2)"],
+      ["unlogged", "merged, no entry", "var(--muted)"], ["open", "still open", "var(--axis)"], ["closed", "closed, not merged", "var(--grid)"]]
+      .filter(([k]) => Object.values(T).some((t) => t[k]));
+    if (!C.pr_types) return legend([["maintainer", "var(--s1)"], ["outside contributor", "var(--s3)"]]) + hbars(C.pr_authors.slice(0, 9).map(([a, n]) => ({ label: a, value: n, color: maint.has(a) ? "var(--s1)" : "var(--s3)" })), { labelW: 150, rowH: 30, W: 780 });
+    return `${legend(kinds.map(([, l, c]) => [l, c]))}<p class="small muted" style="margin:2px 0 0">◦ = outside contributor${logged ? " · type read from the changelog entry of merged PRs; open and closed ones are not typed yet" : ""}</p>
+      ${stackbars(C.pr_authors.slice(0, 9).map(([a, n]) => ({ label: `${maint.has(a) ? "" : "◦ "}${a}`, parts: kinds.map(([k, , c]) => [k, (T[a] || {})[k] || 0, c]),
+        tip: `<b>${esc(a)}</b> · ${n} PRs<br>${kinds.filter(([k]) => (T[a] || {})[k]).map(([k, l]) => `${l}: ${T[a][k]}`).join("<br>")}` })), { labelW: 150, rowH: 28, W: 780 })}`;
+  }
   S("contributors", { kicker: "Deep dive · community & flow", title: T("contributors", "Who is contributing"), sowhat: ns("contributors").so_what, metrics: ns("contributors").metrics, section: "Deep dives", station: "People" },
     `${tiles(["pr_contributors", "new_contributors", "external_pr_share", "top_merger_share", "bus_factor"])}
-     <div class="cols3 grow"><div class="card span2"><h3>PRs opened this window, by author</h3>${legend([["maintainer", "var(--s1)"], ["outside contributor", "var(--s3)"]])}
-       ${hbars(C.pr_authors.slice(0, 9).map(([a, n]) => ({ label: a, value: n, color: maint.has(a) ? "var(--s1)" : "var(--s3)" })), { labelW: 150, rowH: 30, W: 780 })}</div>
+     <div class="cols3 grow"><div class="card span2"><h3>PRs opened this window, by author and type</h3>${prTypeChart()}</div>
      <div class="card"><h3>Who merges</h3>${hbars((C.mergers || []).map(([a, n]) => ({ label: a || "?", value: n, color: "var(--s1)" })), { labelW: 130, rowH: 30, W: 420, empty: "No PRs merged in this window." })}
        <h3 style="margin-top:10px">Share of the team's work, by author</h3>${legend(WORK_KINDS.map(([k, c]) => [k, c]))}
        ${C.work_by_author ? stackbars(C.work_by_author.slice(0, 5).map(([a, mix, n, func]) => ({ label: a,

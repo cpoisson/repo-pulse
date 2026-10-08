@@ -86,6 +86,20 @@ def work(lines: int) -> float:
     return math.log2(1 + lines)
 
 
+PR_FUNCTIONAL_ORDER = ("feature", "fix", "change", "internal")   # a PR logged under several sections takes the first
+
+
+def pr_type(pr: dict, kind, sections: list[str] | None) -> str:
+    """feature / fix / change / internal from the changelog fragment of a merged PR; no_code when every file it touches
+    is tests, docs, build, deps or generated; else untyped (open, closed, unlogged, or no file list)."""
+    kinds = {kind(f["path"]) for f in pr.get("files") or []}
+    if kinds and not kinds & {"code"}:
+        return "no_code"
+    funcs = {{"removal": "change"}.get(FUNCTIONAL.get(s, "internal"), FUNCTIONAL.get(s, "internal")) for s in sections or []}
+    funcs = {"internal" if f in ("docs", "other") else f for f in funcs}
+    return next((f for f in PR_FUNCTIONAL_ORDER if f in funcs), "untyped")
+
+
 def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]:
     k, ctx, charts = [], {}, {}
     commits = [c for c in raw.get("commits", []) if not cfg.is_bot(c["author"])]
@@ -130,6 +144,20 @@ def compute(cfg: Config, raw: dict, w: Windows) -> tuple[list[dict], dict, dict]
             if c["sha"] in changelog:
                 functional[c["author"]]["_logged"] += 1
         return mod_lines, mod_commits, files, mod_work, authors, +code_work, author_mix, functional
+
+    # PRs opened in the window, typed; a merged PR's changelog comes from its squash commit, found by the "(#N)" suffix
+    by_pr = {int(m[1]): changelog.get(c["sha"]) for c in commits if (m := re.search(r"\(#(\d+)\)\s*$", c["subject"]))}
+    pr_kind = lambda p: path_kind(p, {cfg.changelog_fragments: "docs"} | cfg.path_kinds if cfg.changelog_fragments else cfg.path_kinds,
+                                  generated, gen_globs)
+    pr_types: dict[str, Counter] = defaultdict(Counter)
+    for pr in raw.get("pulls", []):
+        if within(ts(pr["createdAt"]), w.cur) and not cfg.is_bot(pr["author"]):
+            secs = by_pr.get(pr["number"]) if pr.get("mergedAt") else None
+            t = pr_type(pr, pr_kind, secs)
+            if t == "untyped" and changelog:   # with a changelog, say why a code PR has no type yet
+                t = "unlogged" if pr.get("mergedAt") else "closed" if pr.get("closedAt") else "open"
+            pr_types[pr["author"]][t] += 1
+    charts["pr_types"] = {a: dict(c) for a, c in pr_types.items()}
 
     ml, mc, files, mwork, authors, cwork, mix, func = churn(w.cur)
     mlp, _, _, _, authors_p, cwork_p, _, func_p = churn(w.prior)
